@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 
 		// 1. Parse the HCL file using the hclmodifier package.
 		// The logger from cmd/root.go is passed to the package function.
-		hclFile, err := modifier.NewFromFile(filePath, logger)
+		hclFile, err := hclmodifier.NewFromFile(filePath, logger)
 		if err != nil {
 			// ParseHCLFile already logs the detailed error.
 			// We return the error to Cobra, which will typically print it to stderr.
@@ -41,7 +41,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// 2. Modify the "name" attributes using the hclmodifier package.
-		modifiedCount, err := modifier.ModifyNameAttributes()
+		modifiedCount, err := hclFile.ModifyNameAttributes()
 		if err != nil {
 			// ModifyNameAttributes already logs the detailed error.
 			return fmt.Errorf("failed to modify HCL attributes: %w", err)
@@ -50,7 +50,7 @@ var rootCmd = &cobra.Command{
 
 
 		// 3. Write the modified HCL content back to the file using the hclmodifier package.
-		err = modifier.WriteToFile(filePath, hclFile, logger)
+		err = hclFile.WriteToFile(filePath)
 		if err != nil {
 			// WriteHCLFile already logs the detailed error.
 			return fmt.Errorf("failed to write modified HCL file: %w", err)

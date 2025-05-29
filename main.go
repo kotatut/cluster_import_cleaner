@@ -1,7 +1,7 @@
 package main
 
 import (
-	"tf-modifier/cmd"
+	"github.com/kotatut/cluster_import_cleaner/cmd"
 )
 
 func main() {
