@@ -9,31 +9,39 @@ import (
 )
 
 var logger *zap.Logger
+var filePathVariable string // Variable to store the file path from the flag
 
 func init() {
 	var err error
-	// Using NewDevelopment for more verbose output during development.
-	// NewProduction() can be used for more structured, less verbose output in production.
 	logger, err = zap.NewDevelopment()
 	if err != nil {
-		// Fallback to fmt.Fprintf if logger initialization fails.
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1) // Exit if logger cannot be initialized, as logging is critical.
+		os.Exit(1)
+	}
+
+	// Define the persistent --file flag
+	rootCmd.PersistentFlags().StringVar(&filePathVariable, "file", "", "Path to the HCL file to modify (required)")
+	// Mark the --file flag as required
+	if err := rootCmd.MarkPersistentFlagRequired("file"); err != nil {
+		// This error should ideally not happen for a newly defined flag.
+		// If it does, it's a programming error in setting up Cobra.
+		fmt.Fprintf(os.Stderr, "Error marking 'file' flag required: %v\n", err)
+		os.Exit(1) // Exit if flag setup fails
 	}
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "tf-modifier [file-path]",
+	Use:   "tf-modifier", // Removed [file-path] from Use, as it's now a flag
 	Short: "A CLI tool to modify Terraform files",
 	Long:  `tf-modifier is a CLI tool that parses a Terraform (.tf) file, appends "-clone" to all "name" attributes, and saves the changes.`,
-	Args:  cobra.ExactArgs(1), // Ensures exactly one argument (file path) is passed
+	// Args: cobra.ExactArgs(1), // Removed positional argument validation
 	RunE: func(cmd *cobra.Command, args []string) error {
-		filePath := args[0]
-		logger.Info("Processing file", zap.String("filePath", filePath))
+		// filePath := args[0] // Removed: file path now comes from filePathVariable
+		logger.Info("Processing file", zap.String("filePath", filePathVariable))
 
 		// 1. Parse the HCL file using the hclmodifier package.
 		// The logger from cmd/root.go is passed to the package function.
-		hclFile, err := hclmodifier.NewFromFile(filePath, logger)
+		hclFile, err := hclmodifier.NewFromFile(filePathVariable, logger)
 		if err != nil {
 			// ParseHCLFile already logs the detailed error.
 			// We return the error to Cobra, which will typically print it to stderr.
@@ -46,17 +54,17 @@ var rootCmd = &cobra.Command{
 			// ModifyNameAttributes already logs the detailed error.
 			return fmt.Errorf("failed to modify HCL attributes: %w", err)
 		}
-		logger.Info("Attribute modification complete", zap.Int("modifiedCount", modifiedCount), zap.String("filePath", filePath))
+		logger.Info("Attribute modification complete", zap.Int("modifiedCount", modifiedCount), zap.String("filePath", filePathVariable))
 
 
 		// 3. Write the modified HCL content back to the file using the hclmodifier package.
-		err = hclFile.WriteToFile(filePath)
+		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
 			// WriteHCLFile already logs the detailed error.
 			return fmt.Errorf("failed to write modified HCL file: %w", err)
 		}
 
-		logger.Info("Successfully processed and saved HCL file", zap.String("filePath", filePath))
+		logger.Info("Successfully processed and saved HCL file", zap.String("filePath", filePathVariable))
 		return nil
 	},
 }
@@ -78,10 +86,14 @@ func Execute() {
 		// Errors from RunE should already be logged with context.
 		// Cobra prints the error to os.Stderr by default.
 		// We log a final message here before exiting with a non-zero status.
-		logger.Fatal("Command execution failed", zap.Error(err))
-		// os.Exit(1) is implicitly called by logger.Fatal, but can be explicit if not using Fatal.
-		// If not using logger.Fatal, then:
-		// logger.Error("Command execution failed", zap.Error(err))
-		// os.Exit(1)
+	// Changed logger.Fatal to logger.Error and added explicit os.Exit(1)
+	logger.Error("Command execution failed", zap.Error(err))
+	os.Exit(1)
 	}
+}
+
+// GetCmdLogger returns the package-level logger instance.
+// This is used by main.go for panic recovery logging.
+func GetCmdLogger() *zap.Logger {
+	return logger
 }
