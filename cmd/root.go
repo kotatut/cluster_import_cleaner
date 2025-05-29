@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/hashicorp/hcl/v2" // Used by hclwrite and for hcl.Pos
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/hashicorp/hcl/v2/hclsyntax" // For token types like TokenQuotedLit
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
 )
@@ -44,7 +45,8 @@ var rootCmd = &cobra.Command{
 		// 2. Parse into hclwrite.File using hclwrite.ParseConfig().
 		hclFile, diags := hclwrite.ParseConfig(contentBytes, filePath, hcl.Pos{Line: 1, Column: 1})
 		if diags.HasErrors() {
-			logger.Error("Error parsing HCL file", zap.String("filePath", filePath), zap.Stringer("diagnostics", diags))
+			// Use diags.Error() for a string representation of the diagnostics.
+			logger.Error("Error parsing HCL file", zap.String("filePath", filePath), zap.String("diagnostics", diags.Error()))
 			return fmt.Errorf("HCL parsing failed: %s", diags.Error())
 		}
 
@@ -68,7 +70,8 @@ var rootCmd = &cobra.Command{
 			var originalStringValue string
 			isSimpleQuotedString := false
 
-			if len(exprTokens) == 1 && exprTokens[0].Type == hclwrite.TokenQuotedLit {
+			// Use hclsyntax.TokenQuotedLit for checking token type
+			if len(exprTokens) == 1 && exprTokens[0].Type == hclsyntax.TokenQuotedLit {
 				tokenBytes := exprTokens[0].Bytes
 				if len(tokenBytes) >= 2 && tokenBytes[0] == '"' && tokenBytes[len(tokenBytes)-1] == '"' {
 					originalStringValue = string(tokenBytes[1 : len(tokenBytes)-1])
