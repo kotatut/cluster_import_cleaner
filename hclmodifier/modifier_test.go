@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -90,7 +91,6 @@ resource "aws_instance" "web" {
 	// hclwrite should ideally preserve formatting, making byte comparison feasible.
 	assert.Equal(t, strings.TrimSpace(originalHCLContent), strings.TrimSpace(string(readFile.Bytes())), "Content after round trip should match original")
 }
-
 
 // TestGetBlock_Exists tests finding an existing block.
 func TestGetBlock_Exists(t *testing.T) {
@@ -305,7 +305,6 @@ func TestGetAttribute_NilBlockBody(t *testing.T) {
 	assert.Contains(t, err.Error(), "input block test_type has a nil body")
 }
 
-
 // --- Tests for GetAttributeValue ---
 
 func TestGetAttributeValue_SimpleLiterals(t *testing.T) {
@@ -467,7 +466,6 @@ func TestGetAttributeValue_NilAttributeExpr(t *testing.T) {
 	t.Log("TestGetAttributeValue_NilAttributeExpr: Skipped direct test of nil expression due to hclwrite encapsulation. Defensive check exists in function.")
 }
 
-
 // --- Tests for SetAttributeValue ---
 
 func TestSetAttributeValue_NewAndOverwrite(t *testing.T) {
@@ -492,11 +490,10 @@ resource "aws_instance" "server" {
 	// Set a new boolean attribute
 	err = SetAttributeValue(block, "enable_monitoring", cty.True, logger)
 	assert.NoError(t, err)
-	
+
 	// Overwrite existing string attribute "ami"
 	err = SetAttributeValue(block, "ami", cty.StringVal("ami-updated"), logger)
 	assert.NoError(t, err)
-
 
 	expectedHCL := `
 resource "aws_instance" "server" {
@@ -532,7 +529,6 @@ func TestSetAttributeValue_NilBlockBody(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "input block test_type has a nil body")
 }
-
 
 // --- Tests for RemoveAttribute ---
 
@@ -662,7 +658,6 @@ func TestRemoveBlock_NilFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "input hclFile cannot be nil")
 }
 
-
 // --- Tests for ModifyNameAttributes ---
 
 func TestModifyNameAttributes_Basic(t *testing.T) {
@@ -778,4 +773,347 @@ func TestModifyNameAttributes_EmptyFile(t *testing.T) {
 	modifiedCount, err := ModifyNameAttributes(hclFile, logger)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, modifiedCount)
+}
+
+func TestModifier_RemoveAttributes_SpecificResource(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "primary" {
+  name                 = "main-cluster"
+  location             = "us-central1"
+  initial_node_count   = 1
+  remove_me_also       = true
+}
+resource "google_container_node_pool" "primary_preempt_nodes" {
+  name       = "primary-node-pool"
+  location   = "us-central1"
+  cluster    = "main-cluster"
+  node_count = 1
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	resourceName := "primary"
+	attrsToRemove := []string{"location", "initial_node_count", "non_existent_attr"}
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", &resourceName, attrsToRemove)
+
+	assert.NoError(t, err)
+	// "location" and "initial_node_count" existed. "non_existent_attr" did not.
+	// RemoveAttribute returns nil for non-existent, so it will be counted.
+	assert.Equal(t, 3, removedCount, "Should count all attributes that are now confirmed absent")
+
+	expectedHCL := `
+resource "google_container_cluster" "primary" {
+  name           = "main-cluster"
+  remove_me_also = true
+}
+resource "google_container_node_pool" "primary_preempt_nodes" {
+  name       = "primary-node-pool"
+  location   = "us-central1"
+  cluster    = "main-cluster"
+  node_count = 1
+}
+`
+	actualHCLBytes := modifier.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(expectedHCL), strings.TrimSpace(string(actualHCLBytes)), "HCL output mismatch")
+}
+
+func TestModifier_RemoveAttributes_SpecificResourceNotFound(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "another" {
+  name     = "another-cluster"
+  location = "us-east1"
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	resourceName := "non_existent_primary"
+	attrsToRemove := []string{"location"}
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", &resourceName, attrsToRemove)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource 'google_container_cluster' with name 'non_existent_primary' not found")
+	assert.Equal(t, 0, removedCount) // No attributes should have been counted as removed
+}
+
+func TestModifier_RemoveAttributes_AllResourcesOfType(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "primary" {
+  name                 = "main-cluster"
+  location             = "us-central1"
+  initial_node_count   = 1
+}
+resource "google_container_cluster" "secondary" {
+  name                 = "secondary-cluster"
+  location             = "us-east1"
+  other_attr           = "value"
+}
+resource "google_container_node_pool" "pool" {
+  name       = "pool-1"
+  location   = "us-central1" // Should not be removed
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	// Test with nil optionalResourceName
+	attrsToRemove := []string{"location", "initial_node_count"}
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", nil, attrsToRemove)
+	assert.NoError(t, err)
+	// primary: location, initial_node_count (2)
+	// secondary: location (1)
+	// Total should be 3 actually removed + 1 that was targeted but not present (initial_node_count on secondary)
+	assert.Equal(t, 4, removedCount)
+
+	expectedHCLAfterNil := `
+resource "google_container_cluster" "primary" {
+  name = "main-cluster"
+}
+resource "google_container_cluster" "secondary" {
+  name       = "secondary-cluster"
+  other_attr = "value"
+}
+resource "google_container_node_pool" "pool" {
+  name       = "pool-1"
+  location   = "us-central1" // Should not be removed
+}
+`
+	actualHCLBytes := modifier.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(expectedHCLAfterNil), strings.TrimSpace(string(actualHCLBytes)), "HCL output mismatch after nil name")
+
+	// Reset for next test part: pointer to empty string
+	filePath2, _ := createTempHCLFile(t, hclContent) // Recreate from original
+	modifier2, err := NewFromFile(filePath2, logger)
+	require.NoError(t, err)
+	emptyName := ""
+	removedCount2, err := modifier2.RemoveAttributes("google_container_cluster", &emptyName, attrsToRemove)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, removedCount2) // Same count expected
+	actualHCLBytes2 := modifier2.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(expectedHCLAfterNil), strings.TrimSpace(string(actualHCLBytes2)), "HCL output mismatch after empty string name")
+
+}
+
+func TestModifier_RemoveAttributes_ResourceTypeNotFound(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_node_pool" "pool" {
+  name = "pool-1"
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	attrsToRemove := []string{"location"}
+	// No error is expected if the resource type itself is not found, removedCount should be 0.
+	removedCount, err := modifier.RemoveAttributes("non_existent_resource_type", nil, attrsToRemove)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, removedCount)
+
+	actualHCLBytes := modifier.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(hclContent), strings.TrimSpace(string(actualHCLBytes)), "HCL should be unchanged")
+}
+
+func TestModifier_RemoveAttributes_NoMatchingAttributesInTarget(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "primary" {
+  name = "main-cluster"
+  unrelated = "value"
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	resourceName := "primary"
+	attrsToRemove := []string{"location", "initial_node_count"}
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", &resourceName, attrsToRemove)
+
+	assert.NoError(t, err)
+	// Both "location" and "initial_node_count" were not present.
+	// They are targeted, confirmed absent, so count should be 2.
+	assert.Equal(t, 2, removedCount)
+
+	actualHCLBytes := modifier.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(hclContent), strings.TrimSpace(string(actualHCLBytes)), "HCL should be unchanged as no attributes were actually present to remove")
+}
+
+func TestModifier_RemoveAttributes_TargetBlockHasNoRemovableAttrs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "primary" {
+  name = "main-cluster"
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+	name := "primary"
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", &name, []string{"location"})
+	assert.NoError(t, err)
+	assert.Equal(t, 1, removedCount) // "location" was targeted, confirmed absent.
+	assert.Equal(t, strings.TrimSpace(hclContent), strings.TrimSpace(string(modifier.File().Bytes())))
+}
+
+func TestModifier_RemoveAttributes_EmptyAttributesToRemove(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_container_cluster" "primary" {
+  name     = "main-cluster"
+  location = "us-central1"
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	resourceName := "primary"
+	attrsToRemove := []string{} // Empty slice
+	removedCount, err := modifier.RemoveAttributes("google_container_cluster", &resourceName, attrsToRemove)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 0, removedCount)
+
+	actualHCLBytes := modifier.File().Bytes()
+	assert.Equal(t, strings.TrimSpace(hclContent), strings.TrimSpace(string(actualHCLBytes)), "HCL should be unchanged")
+}
+
+func TestModifier_RemoveAttributes_ComplexScenario(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	hclContent := `
+resource "google_compute_instance" "vm_instance" {
+  name         = "test-vm"
+  machine_type = "e2-medium"
+  zone         = "us-central1-a"
+  description  = "Test VM"
+}
+resource "google_container_cluster" "primary" {
+  name                 = "main-cluster"
+  location             = "us-central1"
+  initial_node_count   = 1
+  description          = "Primary K8s cluster"
+}
+resource "google_container_cluster" "secondary" {
+  name                 = "secondary-cluster"
+  location             = "us-east1"
+  initial_node_count   = 3
+  description          = "Secondary K8s cluster"
+}
+resource "google_storage_bucket" "my_bucket" {
+  name     = "my-app-bucket"
+  location = "US"
+  uniform_bucket_level_access = true
+}
+`
+	filePath, _ := createTempHCLFile(t, hclContent)
+	modifier, err := NewFromFile(filePath, logger)
+	require.NoError(t, err)
+
+	// Scenario 1: Remove "description" and "initial_node_count" from "primary" google_container_cluster
+	primaryName := "primary"
+	attrs1 := []string{"description", "initial_node_count", "non_existent"}
+	count1, err1 := modifier.RemoveAttributes("google_container_cluster", &primaryName, attrs1)
+	assert.NoError(t, err1)
+	assert.Equal(t, 3, count1) // description, initial_node_count, non_existent
+
+	expectedAfterS1 := `
+resource "google_compute_instance" "vm_instance" {
+  name         = "test-vm"
+  machine_type = "e2-medium"
+  zone         = "us-central1-a"
+  description  = "Test VM"
+}
+resource "google_container_cluster" "primary" {
+  name     = "main-cluster"
+  location = "us-central1"
+}
+resource "google_container_cluster" "secondary" {
+  name                 = "secondary-cluster"
+  location             = "us-east1"
+  initial_node_count   = 3
+  description          = "Secondary K8s cluster"
+}
+resource "google_storage_bucket" "my_bucket" {
+  name     = "my-app-bucket"
+  location = "US"
+  uniform_bucket_level_access = true
+}
+`
+	assert.Equal(t, strings.TrimSpace(expectedAfterS1), strings.TrimSpace(string(modifier.File().Bytes())), "Mismatch after S1")
+
+	// Scenario 2: Remove "location" from all google_container_cluster resources
+	attrs2 := []string{"location"}
+	count2, err2 := modifier.RemoveAttributes("google_container_cluster", nil, attrs2)
+	assert.NoError(t, err2)
+	// primary: location (1)
+	// secondary: location (1)
+	assert.Equal(t, 2, count2)
+
+	expectedAfterS2 := `
+resource "google_compute_instance" "vm_instance" {
+  name         = "test-vm"
+  machine_type = "e2-medium"
+  zone         = "us-central1-a"
+  description  = "Test VM"
+}
+resource "google_container_cluster" "primary" {
+  name = "main-cluster"
+}
+resource "google_container_cluster" "secondary" {
+  name                 = "secondary-cluster"
+  initial_node_count   = 3
+  description          = "Secondary K8s cluster"
+}
+resource "google_storage_bucket" "my_bucket" {
+  name     = "my-app-bucket"
+  location = "US"
+  uniform_bucket_level_access = true
+}
+`
+	assert.Equal(t, strings.TrimSpace(expectedAfterS2), strings.TrimSpace(string(modifier.File().Bytes())), "Mismatch after S2")
+
+	// Scenario 3: Attempt to remove from a non-matching resource type
+	attrs3 := []string{"zone"}
+	count3, err3 := modifier.RemoveAttributes("google_compute_firewall", nil, attrs3)
+	assert.NoError(t, err3)
+	assert.Equal(t, 0, count3) // No blocks of this type, so no attributes processed.
+	assert.Equal(t, strings.TrimSpace(expectedAfterS2), strings.TrimSpace(string(modifier.File().Bytes())), "Should be unchanged after S3")
+
+	// Scenario 4: Remove "uniform_bucket_level_access" from the specific bucket
+	bucketName := "my_bucket"
+	attrs4 := []string{"uniform_bucket_level_access"}
+	count4, err4 := modifier.RemoveAttributes("google_storage_bucket", &bucketName, attrs4)
+	assert.NoError(t, err4)
+	assert.Equal(t, 1, count4)
+
+	expectedAfterS4 := `
+resource "google_compute_instance" "vm_instance" {
+  name         = "test-vm"
+  machine_type = "e2-medium"
+  zone         = "us-central1-a"
+  description  = "Test VM"
+}
+resource "google_container_cluster" "primary" {
+  name = "main-cluster"
+}
+resource "google_container_cluster" "secondary" {
+  name                 = "secondary-cluster"
+  initial_node_count   = 3
+  description          = "Secondary K8s cluster"
+}
+resource "google_storage_bucket" "my_bucket" {
+  name     = "my-app-bucket"
+  location = "US"
+}
+`
+	assert.Equal(t, strings.TrimSpace(expectedAfterS4), strings.TrimSpace(string(modifier.File().Bytes())), "Mismatch after S4")
 }

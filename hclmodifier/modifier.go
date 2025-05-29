@@ -208,3 +208,89 @@ func (m *Modifier) RemoveBlock(blockType string, blockLabels []string) error {
 	m.logger.Info("Successfully removed block", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
 	return nil
 }
+
+func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceName *string, attributesToRemove []string) (removedCount int, err error) {
+	m.logger.Debug("Attempting to remove attributes",
+		zap.String("resourceTypeLabel", resourceTypeLabel),
+		zap.Any("optionalResourceName", optionalResourceName),
+		zap.Strings("attributesToRemove", attributesToRemove))
+
+	if m.file == nil || m.file.Body() == nil {
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	if len(attributesToRemove) == 0 {
+		m.logger.Debug("No attributes specified to remove.")
+		return 0, nil
+	}
+
+	var targetResourceName string
+	if optionalResourceName != nil {
+		targetResourceName = *optionalResourceName
+	}
+
+	foundSpecificResource := false
+
+	for _, block := range m.file.Body().Blocks() {
+		if block.Type() != "resource" {
+			continue // Only interested in "resource" blocks
+		}
+
+		labels := block.Labels()
+		if len(labels) == 0 || labels[0] != resourceTypeLabel {
+			continue // Does not match the target resource type label
+		}
+
+		// At this point, the block matches the resourceTypeLabel.
+		// Now check if a specific resource name is targeted.
+		if targetResourceName != "" {
+			if len(labels) < 2 || labels[1] != targetResourceName {
+				continue // This block is not the specific named resource we are looking for.
+			}
+			// If we are looking for a specific resource and found it.
+			foundSpecificResource = true
+		}
+
+		m.logger.Debug("Processing matching block for attribute removal",
+			zap.String("blockType", block.Type()),
+			zap.Strings("blockLabels", block.Labels()))
+
+		for _, attrName := range attributesToRemove {
+			// Use the existing RemoveAttribute method on Modifier.
+			// This method already handles logging and the case where attribute doesn't exist.
+			errRemove := m.RemoveAttribute(block, attrName)
+			if errRemove != nil {
+				m.logger.Error("Error removing attribute from block",
+					zap.String("attributeName", attrName),
+					zap.String("blockType", block.Type()),
+					zap.Strings("blockLabels", block.Labels()),
+					zap.Error(errRemove))
+				// Decide if this error should halt further processing for this block or entire operation.
+				// For now, let's assume we continue with other attributes for this block.
+				// If m.RemoveAttribute itself becomes more error-prone, this might need adjustment.
+			} else {
+				// Check if the attribute actually existed before removal for accurate count.
+				if block.Body().GetAttribute(attrName) == nil { // Check if it's gone
+					removedCount++
+				}
+			}
+		}
+		// If a specific resource was targeted and processed, no need to check other blocks.
+		if targetResourceName != "" && foundSpecificResource {
+			break
+		}
+	}
+
+	if targetResourceName != "" && !foundSpecificResource {
+		m.logger.Warn("Specified resource name not found",
+			zap.String("resourceTypeLabel", resourceTypeLabel),
+			zap.String("targetResourceName", targetResourceName))
+		return removedCount, fmt.Errorf("resource '%s' with name '%s' not found", resourceTypeLabel, targetResourceName)
+	}
+
+	m.logger.Info("Finished removing attributes",
+		zap.Int("totalAttributesActuallyRemoved", removedCount), // This count might not be perfectly accurate as explained above.
+		zap.String("resourceTypeLabel", resourceTypeLabel),
+		zap.Any("optionalResourceName", optionalResourceName))
+	return removedCount, nil
+}
