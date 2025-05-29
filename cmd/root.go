@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
+	// "os" // os.ReadFile and os.WriteFile are now in hclmodifier
 	"github.com/spf13/cobra"
-	"github.com/hashicorp/hcl/v2" // Used by hclwrite and for hcl.Pos
-	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/hashicorp/hcl/v2/hclsyntax" // For token types like TokenQuotedLit
-	"github.com/zclconf/go-cty/cty"
+	// "github.com/hashicorp/hcl/v2" // No longer directly needed for hcl.Pos if ParseHCLFile handles it
+	// "github.com/hashicorp/hcl/v2/hclwrite" // Handled by hclmodifier
+	// "github.com/hashicorp/hcl/v2/hclsyntax" // Handled by hclmodifier
+	// "github.com/zclconf/go-cty/cty" // Handled by hclmodifier
 	"go.uber.org/zap"
+	"tf-modifier/hclmodifier" // Import the new package
 )
 
 var logger *zap.Logger
@@ -35,107 +35,46 @@ var rootCmd = &cobra.Command{
 		filePath := args[0]
 		logger.Info("Processing file", zap.String("filePath", filePath))
 
-		// 1. Read the content of the file specified by the filePath argument.
-		contentBytes, err := os.ReadFile(filePath)
+		// 1. Parse the HCL file using the hclmodifier package.
+		// The logger from cmd/root.go is passed to the package function.
+		hclFile, err := hclmodifier.ParseHCLFile(filePath, logger)
 		if err != nil {
-			logger.Error("Error reading file", zap.String("filePath", filePath), zap.Error(err))
-			return err // Return error to Cobra for handling
+			// ParseHCLFile already logs the detailed error.
+			// We return the error to Cobra, which will typically print it to stderr.
+			return fmt.Errorf("failed to parse HCL file: %w", err)
 		}
 
-		// 2. Parse into hclwrite.File using hclwrite.ParseConfig().
-		hclFile, diags := hclwrite.ParseConfig(contentBytes, filePath, hcl.Pos{Line: 1, Column: 1})
-		if diags.HasErrors() {
-			// Use diags.Error() for a string representation of the diagnostics.
-			logger.Error("Error parsing HCL file", zap.String("filePath", filePath), zap.String("diagnostics", diags.Error()))
-			return fmt.Errorf("HCL parsing failed: %s", diags.Error())
-		}
-
-		modifiedCount := 0
-		// 3. Traverse the parsed HCL body.
-		for _, block := range hclFile.Body().Blocks() {
-			nameAttr := block.Body().GetAttribute("name")
-			if nameAttr == nil {
-				continue
-			}
-
-			exprTokens := nameAttr.Expr().BuildTokens(nil)
-			if len(exprTokens) == 0 {
-				logger.Warn("Skipping 'name' attribute: no expression tokens found",
-					zap.String("filePath", filePath),
-					zap.String("blockType", block.Type()),
-					zap.Strings("blockLabels", block.Labels()))
-				continue
-			}
-
-			var originalStringValue string
-			isSimpleQuotedString := false
-
-			// Use hclsyntax.TokenQuotedLit for checking token type
-			if len(exprTokens) == 1 && exprTokens[0].Type == hclsyntax.TokenQuotedLit {
-				tokenBytes := exprTokens[0].Bytes
-				if len(tokenBytes) >= 2 && tokenBytes[0] == '"' && tokenBytes[len(tokenBytes)-1] == '"' {
-					originalStringValue = string(tokenBytes[1 : len(tokenBytes)-1])
-					isSimpleQuotedString = true
-				} else {
-					logger.Info("Skipping 'name' attribute: token is quoted but not a simple double-quoted string",
-						zap.String("filePath", filePath),
-						zap.String("blockType", block.Type()),
-						zap.Strings("blockLabels", block.Labels()))
-				}
-			} else {
-				logger.Info("Skipping 'name' attribute: not a simple quoted string",
-					zap.String("filePath", filePath),
-					zap.String("blockType", block.Type()),
-					zap.Strings("blockLabels", block.Labels()),
-					zap.Strings("tokenTypes", exprTokensToTypesHelper(exprTokens)))
-			}
-
-			if isSimpleQuotedString {
-				modifiedStringValue := originalStringValue + "-clone"
-				newTokens := hclwrite.TokensForValue(cty.StringVal(modifiedStringValue))
-				block.Body().SetAttributeRaw("name", newTokens)
-				logger.Info("Modified 'name' attribute",
-					zap.String("filePath", filePath),
-					zap.String("blockType", block.Type()),
-					zap.Strings("blockLabels", block.Labels()),
-					zap.String("from", originalStringValue),
-					zap.String("to", modifiedStringValue))
-				modifiedCount++
-			}
-		}
-
-		if modifiedCount == 0 {
-			logger.Info("No 'name' attributes were modified (or none were simple quoted strings)", zap.String("filePath", filePath))
-		}
-
-		modifiedBytes := hclFile.Bytes()
-		err = os.WriteFile(filePath, modifiedBytes, 0644)
+		// 2. Modify the "name" attributes using the hclmodifier package.
+		modifiedCount, err := hclmodifier.ModifyNameAttributes(hclFile, logger)
 		if err != nil {
-			logger.Error("Error writing modified HCL to file", zap.String("filePath", filePath), zap.Error(err))
-			return err
+			// ModifyNameAttributes already logs the detailed error.
+			return fmt.Errorf("failed to modify HCL attributes: %w", err)
+		}
+		logger.Info("Attribute modification complete", zap.Int("modifiedCount", modifiedCount), zap.String("filePath", filePath))
+
+
+		// 3. Write the modified HCL content back to the file using the hclmodifier package.
+		err = hclmodifier.WriteHCLFile(filePath, hclFile, logger)
+		if err != nil {
+			// WriteHCLFile already logs the detailed error.
+			return fmt.Errorf("failed to write modified HCL file: %w", err)
 		}
 
-		logger.Info("Successfully modified and saved HCL file", zap.String("filePath", filePath))
+		logger.Info("Successfully processed and saved HCL file", zap.String("filePath", filePath))
 		return nil
 	},
 }
 
-// Helper function to get string representations of token types for logging.
-func exprTokensToTypesHelper(tokens hclwrite.Tokens) []string {
-	types := make([]string, 0, len(tokens))
-	for _, t := range tokens {
-		types = append(types, t.Type.String())
-	}
-	return types
-}
+// exprTokensToTypesHelper is no longer needed here as it's in hclmodifier package (if still public, or private there).
 
 func Execute() {
 	// It's good practice to sync the logger before exiting.
 	defer func() {
-		if err := logger.Sync(); err != nil {
+		if errSync := logger.Sync(); errSync != nil {
 			// Log the sync error itself, if possible, or fallback to fmt.
 			// This indicates a problem with the logging system itself.
-			fmt.Fprintf(os.Stderr, "Error syncing logger: %v\n", err)
+			// Using fmt.Fprintf directly as logger.Sync() itself failed.
+			fmt.Fprintf(os.Stderr, "Error syncing logger: %v\n", errSync)
 		}
 	}()
 
