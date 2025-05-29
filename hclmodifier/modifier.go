@@ -3,12 +3,11 @@ package hclmodifier
 import (
 	"fmt"
 	"os"
-	"slices" // Using standard library for slice comparison (Go 1.21+)
-	"strconv"
+	"slices"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax" // <-- CORRECTED IMPORT
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
 )
@@ -24,7 +23,6 @@ type Modifier struct {
 // This is the primary entry point for creating a Modifier instance.
 func NewFromFile(filePath string, logger *zap.Logger) (*Modifier, error) {
 	if logger == nil {
-		// Fallback if no logger is provided, though ideally the caller should always provide one.
 		logger, _ = zap.NewDevelopment()
 		logger.Warn("NewFromFile called with nil logger, using default development logger.")
 	}
@@ -40,7 +38,6 @@ func NewFromFile(filePath string, logger *zap.Logger) (*Modifier, error) {
 	hclFile, diags := hclwrite.ParseConfig(contentBytes, filePath, hcl.Pos{Line: 1, Column: 1})
 	if diags.HasErrors() {
 		logger.Error("Error parsing HCL file", zap.String("filePath", filePath), zap.Error(diags))
-		// Wrap the diagnostics error for better context upstream.
 		return nil, fmt.Errorf("HCL parsing failed: %w", diags)
 	}
 
@@ -78,7 +75,6 @@ func (m *Modifier) ModifyNameAttributes() (int, error) {
 	for _, block := range m.file.Body().Blocks() {
 		nameAttribute, err := m.GetAttribute(block, "name")
 		if err != nil {
-			// This is expected for blocks without a "name", so we log at debug level and continue.
 			m.logger.Debug("Attribute 'name' not found in block, skipping.",
 				zap.String("blockType", block.Type()),
 				zap.Strings("blockLabels", block.Labels()))
@@ -100,7 +96,6 @@ func (m *Modifier) ModifyNameAttributes() (int, error) {
 
 			err := m.SetAttributeValue(block, "name", cty.StringVal(modifiedStringValue))
 			if err != nil {
-				// This would be an unexpected error.
 				m.logger.Error("Failed to set modified 'name' attribute",
 					zap.String("blockType", block.Type()),
 					zap.Strings("blockLabels", block.Labels()),
@@ -122,14 +117,12 @@ func (m *Modifier) ModifyNameAttributes() (int, error) {
 // GetBlock finds and returns a specific block based on its type and labels.
 func (m *Modifier) GetBlock(blockType string, blockLabels []string) (*hclwrite.Block, error) {
 	m.logger.Debug("Searching for block", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
-
 	for _, block := range m.file.Body().Blocks() {
 		if block.Type() == blockType && slices.Equal(block.Labels(), blockLabels) {
 			m.logger.Debug("Found matching block", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
 			return block, nil
 		}
 	}
-
 	m.logger.Warn("Block not found", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
 	return nil, fmt.Errorf("block %s %v not found", blockType, blockLabels)
 }
@@ -138,7 +131,6 @@ func (m *Modifier) GetBlock(blockType string, blockLabels []string) (*hclwrite.B
 func (m *Modifier) GetAttribute(block *hclwrite.Block, attributeName string) (*hclwrite.Attribute, error) {
 	attribute := block.Body().GetAttribute(attributeName)
 	if attribute == nil {
-		// Logged at a lower level as it's often an expected condition, not a warning.
 		m.logger.Debug("Attribute not found in block",
 			zap.String("attributeName", attributeName),
 			zap.String("blockType", block.Type()),
@@ -148,27 +140,29 @@ func (m *Modifier) GetAttribute(block *hclwrite.Block, attributeName string) (*h
 	return attribute, nil
 }
 
-// GetAttributeValue extracts a cty.Value from an attribute,
-// ensuring it's a simple literal (string, number, bool) without references.
+// GetAttributeValue evaluates the expression of an attribute and returns its cty.Value.
+// It can only evaluate literal values (strings, numbers, bools) as it uses a nil evaluation context.
+// This method bridges hclwrite (for syntax manipulation) and hcl (for value evaluation).
 func (m *Modifier) GetAttributeValue(attr *hclwrite.Attribute) (cty.Value, error) {
-	// We inspect the raw tokens of the expression.
-	tokens := attr.Expr().BuildTokens(nil)
+	// 1. Get the source bytes of the expression from the hclwrite attribute.
+	exprBytes := attr.Expr().BuildTokens(nil).Bytes()
 
-	// A simple string literal consists of just one token of type TokenQuotedLit.
-	if len(tokens) == 1 && tokens[0].Type == hclsyntax.TokenQuotedLit {
-		// The token bytes include the quotes. strconv.Unquote safely removes them.
-		value, err := strconv.Unquote(string(tokens[0].Bytes))
-		if err != nil {
-			m.logger.Warn("Failed to unquote string token",
-				zap.Error(err))
-			return cty.NilVal, fmt.Errorf("attribute has an invalid string literal: %w", err)
-		}
-		return cty.StringVal(value), nil
+	// 2. Parse these bytes into an evaluatable hcl.Expression using the hclsyntax package.
+	expr, diags := hclsyntax.ParseExpression(exprBytes, "attribute_expr", hcl.Pos{Line: 1, Column: 1}) // <-- CORRECTED
+	if diags.HasErrors() {
+		m.logger.Error("Failed to re-parse attribute expression for evaluation.", zap.Error(diags))
+		return cty.NilVal, fmt.Errorf("failed to parse expression: %w", diags)
 	}
 
-	// If the expression is not a simple string literal, we return an error.
-	m.logger.Debug("Attribute is not a simple string literal, skipping.")
-	return cty.NilVal, fmt.Errorf("attribute is not a simple string literal")
+	// 3. Now, with an hcl.Expression, we can call .Value() to get the cty.Value.
+	// We pass a nil EvalContext because we only want to resolve simple literals.
+	val, diags := expr.Value(nil)
+	if diags.HasErrors() {
+		m.logger.Debug("Attribute expression is not a simple literal", zap.String("expression", string(exprBytes)), zap.Error(diags))
+		return cty.NilVal, fmt.Errorf("attribute is not a simple literal: %w", diags)
+	}
+
+	return val, nil
 }
 
 // SetAttributeValue sets an attribute on the given block with the specified name and value.
@@ -189,12 +183,10 @@ func (m *Modifier) RemoveAttribute(block *hclwrite.Block, attributeName string) 
 	if block == nil || block.Body() == nil {
 		return fmt.Errorf("input block or its body cannot be nil")
 	}
-
 	if block.Body().GetAttribute(attributeName) == nil {
 		m.logger.Debug("Attribute to remove not found, no action needed.", zap.String("attributeName", attributeName))
-		return nil // Not an error if it doesn't exist.
+		return nil
 	}
-
 	block.Body().RemoveAttribute(attributeName)
 	m.logger.Debug("Successfully removed attribute",
 		zap.String("blockType", block.Type()),
@@ -209,13 +201,10 @@ func (m *Modifier) RemoveBlock(blockType string, blockLabels []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot remove block that was not found: %w", err)
 	}
-
 	if removed := m.file.Body().RemoveBlock(blockToRemove); !removed {
-		// This is unlikely to happen if the block was found correctly.
 		m.logger.Error("Failed to remove block, RemoveBlock method returned false", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
 		return fmt.Errorf("failed to remove block %s %v", blockType, blockLabels)
 	}
-
 	m.logger.Info("Successfully removed block", zap.String("blockType", blockType), zap.Strings("blockLabels", blockLabels))
 	return nil
 }
