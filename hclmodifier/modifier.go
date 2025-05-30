@@ -73,6 +73,14 @@ func (m *Modifier) ModifyNameAttributes() (int, error) {
 	}
 
 	for _, block := range m.file.Body().Blocks() {
+		// Only modify "name" attributes within "resource" blocks
+		if block.Type() != "resource" {
+			m.logger.Debug("Skipping block as it is not a resource type",
+				zap.String("blockType", block.Type()),
+				zap.Strings("blockLabels", block.Labels()))
+			continue
+		}
+
 		nameAttribute, err := m.GetAttribute(block, "name")
 		if err != nil {
 			m.logger.Debug("Attribute 'name' not found in block, skipping.",
