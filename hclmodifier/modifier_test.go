@@ -1071,52 +1071,69 @@ func TestApplyAutopilotRule(t *testing.T) {
 		expectEnabledRemoved bool
 	}
 
+	type addonsConfigChecks struct {
+		expectBlockExists            bool
+		expectNetworkPolicyRemoved   bool
+		expectDnsCacheRemoved        bool
+		expectStatefulHaRemoved      bool
+		expectHttpLoadBalancingUnchanged bool // Example of a non-targeted block
+	}
+
 	tests := []struct {
-		name                      string
-		hclContent                string
-		expectedModifications     int
-		clusterName               string // Name of the google_container_cluster resource
-		expectEnableAutopilotAttr *bool  // nil if attribute should be removed, pointer to bool if it should exist with that value
-		expectedRootAttrsRemoved  []string
-		expectedNestedBlocksRemoved []string
-		clusterAutoscaling        *clusterAutoscalingChecks
-		binaryAuthorization       *binaryAuthorizationChecks
-		expectNoOtherChanges      bool // Flag to simplify checks for no-op cases
+		name                                string
+		hclContent                          string
+		expectedModifications               int
+		clusterName                         string
+		expectEnableAutopilotAttr           *bool
+		expectedRootAttrsRemoved            []string
+		expectedTopLevelNestedBlocksRemoved []string
+		addonsConfig                        *addonsConfigChecks
+		clusterAutoscaling                  *clusterAutoscalingChecks
+		binaryAuthorization                 *binaryAuthorizationChecks
+		expectNoOtherChanges                bool
 	}{
 		{
 			name: "enable_autopilot is true, all conflicting fields present",
 			hclContent: `
 resource "google_container_cluster" "autopilot_cluster" {
-  name                  = "autopilot-cluster"
-  enable_autopilot      = true
-  enable_shielded_nodes = true
-  remove_default_node_pool = true
-  default_max_pods_per_node = 110
-  enable_intranode_visibility = true
+  name                          = "autopilot-cluster"
+  location                      = "us-central1"
+  enable_autopilot              = true
+  cluster_ipv4_cidr             = "10.0.0.0/8" # To be removed
+  enable_shielded_nodes         = true         # To be removed
+  remove_default_node_pool      = true         # To be removed
+  default_max_pods_per_node     = 110          # To be removed
+  enable_intranode_visibility   = true         # To be removed
 
-  network_policy_config {
-    disabled = false
+  addons_config {
+    network_policy_config { # To be removed from here
+      disabled = false
+    }
+    dns_cache_config {      # To be removed from here
+      enabled = true
+    }
+    stateful_ha_config {    # To be removed from here
+      enabled = true
+    }
+    http_load_balancing {   # Should remain
+      disabled = false
+    }
   }
-  dns_cache_config {
-    enabled = true
-  }
-  stateful_ha_config {
-    enabled = true
-  }
-  network_policy {
+
+  network_policy { # Top-level, to be removed
     provider = "CALICO"
     enabled  = true
   }
-  node_pool {
+  node_pool { # Top-level, to be removed
     name = "default-pool"
   }
-  node_pool {
+  node_pool { # Top-level, to be removed
     name = "custom-pool"
   }
   cluster_autoscaling {
-    enabled = true
-    autoscaling_profile = "OPTIMIZE_UTILIZATION"
-    resource_limits {
+    enabled = true # To be removed
+    autoscaling_profile = "OPTIMIZE_UTILIZATION" # Should remain
+    resource_limits { # To be removed
       resource_type = "cpu"
       minimum = 1
       maximum = 10
@@ -1124,27 +1141,29 @@ resource "google_container_cluster" "autopilot_cluster" {
   }
   binary_authorization {
     evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE" # Should remain
-    enabled = true                                     # Should be removed
+    enabled = true                                     # To be removed
   }
 }`,
-			expectedModifications: 11, // enable_shielded_nodes, remove_default_node_pool, default_max_pods_per_node, enable_intranode_visibility (4)
-			// network_policy_config, dns_cache_config, stateful_ha_config, network_policy, node_pool (2) (6)
-			// cluster_autoscaling.enabled, cluster_autoscaling.resource_limits (2)
-			// binary_authorization.enabled (1)
+			expectedModifications: 1 + 4 + 3 + 1 + 2 + 2 + 1, // cluster_ipv4_cidr (1) + root_attrs(4) + addons_blocks(3) + network_policy(1) + node_pools(2) + ca_attrs(2) + ba_attrs(1) = 14
 			clusterName:               "autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved: []string{
+				"cluster_ipv4_cidr",
 				"enable_shielded_nodes",
 				"remove_default_node_pool",
 				"default_max_pods_per_node",
 				"enable_intranode_visibility",
 			},
-			expectedNestedBlocksRemoved: []string{
-				"network_policy_config",
-				"dns_cache_config",
-				"stateful_ha_config",
+			expectedTopLevelNestedBlocksRemoved: []string{
 				"network_policy",
-				"node_pool", // This will catch both node_pool blocks
+				"node_pool",
+			},
+			addonsConfig: &addonsConfigChecks{
+				expectBlockExists:            true,
+				expectNetworkPolicyRemoved:   true,
+				expectDnsCacheRemoved:        true,
+				expectStatefulHaRemoved:      true,
+				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
 				expectBlockExists:       true,
@@ -1163,6 +1182,7 @@ resource "google_container_cluster" "autopilot_cluster" {
 resource "google_container_cluster" "standard_cluster" {
   name                  = "standard-cluster"
   enable_autopilot      = false
+  cluster_ipv4_cidr     = "10.0.0.0/8" # Should remain
   enable_shielded_nodes = true // Should remain
   node_pool {                 // Should remain
     name = "default-pool"
@@ -1171,12 +1191,25 @@ resource "google_container_cluster" "standard_cluster" {
     enabled = true
     autoscaling_profile = "BALANCED"
   }
+  addons_config {
+    dns_cache_config {      # Should remain
+      enabled = true
+    }
+    http_load_balancing {   # Should remain
+      disabled = false
+    }
+  }
 }`,
 			expectedModifications:     1, // Only enable_autopilot itself is removed
 			clusterName:               "standard_cluster",
 			expectEnableAutopilotAttr: nil, // Attribute removed
 			expectedRootAttrsRemoved:  []string{},
-			expectedNestedBlocksRemoved: []string{},
+			expectedTopLevelNestedBlocksRemoved: []string{},
+			addonsConfig: &addonsConfigChecks{
+				expectBlockExists:            true,
+				expectDnsCacheRemoved:        false, // Not removed
+				expectHttpLoadBalancingUnchanged: true, // Not removed
+			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
 				expectBlockExists:       true,
 				expectEnabledRemoved:    false, // Not removed
@@ -1192,16 +1225,26 @@ resource "google_container_cluster" "standard_cluster" {
 resource "google_container_cluster" "existing_cluster" {
   name                  = "existing-cluster"
   // enable_autopilot is missing
-  enable_shielded_nodes = true
-  node_pool {
+  cluster_ipv4_cidr     = "10.0.0.0/8" # Should remain
+  enable_shielded_nodes = true         # Should remain
+  node_pool {                          # Should remain
     name = "default-pool"
+  }
+  addons_config {
+    network_policy_config { # Should remain
+      disabled = false
+    }
   }
 }`,
 			expectedModifications:     0,
 			clusterName:               "existing_cluster",
 			expectEnableAutopilotAttr: nil, // Was not there, should not be added
 			expectedRootAttrsRemoved:  []string{},
-			expectedNestedBlocksRemoved: []string{},
+			expectedTopLevelNestedBlocksRemoved: []string{},
+			addonsConfig: &addonsConfigChecks{ // Verify these are NOT removed
+				expectBlockExists:            true,
+				expectNetworkPolicyRemoved:   false,
+			},
 			expectNoOtherChanges:      true,
 		},
 		{
@@ -1212,6 +1255,10 @@ resource "google_container_cluster" "clean_autopilot_cluster" {
   enable_autopilot = true
   location         = "us-central1"
   # No attributes or blocks that would be removed by the rule
+  # cluster_ipv4_cidr is not present, so not removed.
+  addons_config { # Empty or with non-targeted blocks
+    http_load_balancing { disabled = true } # Should remain
+  }
   cluster_autoscaling {
     autoscaling_profile = "BALANCED" # Should remain
   }
@@ -1219,11 +1266,15 @@ resource "google_container_cluster" "clean_autopilot_cluster" {
     evaluation_mode = "DISABLED" # Should remain
   }
 }`,
-			expectedModifications:     0,
+			expectedModifications:     0, // No targeted fields are present to be removed
 			clusterName:               "clean_autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved:  []string{},
-			expectedNestedBlocksRemoved: []string{},
+			expectedTopLevelNestedBlocksRemoved: []string{},
+			addonsConfig: &addonsConfigChecks{
+				expectBlockExists:            true,
+				expectHttpLoadBalancingUnchanged: true,
+			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
 				expectBlockExists:       true,
 				expectEnabledRemoved:    false, // Was not there
@@ -1243,15 +1294,23 @@ resource "google_container_cluster" "invalid_autopilot_cluster" {
   name             = "invalid-autopilot-cluster"
   enable_autopilot = "not_a_boolean"
   enable_shielded_nodes = true
+  cluster_ipv4_cidr     = "10.0.0.0/8" # Should remain
+  addons_config {
+    dns_cache_config { enabled = true } # Should remain
+  }
 }`,
 			expectedModifications:     0,
 			clusterName:               "invalid_autopilot_cluster",
-			expectEnableAutopilotAttr: nil, // Special case: we treat it as "not found" or "invalid" so it's not true/false. The attr itself remains.
-			                               // Let's refine this: the spec says "log this and do nothing". So it should remain.
-			                               // The current code logs a warning and doesn't treat it as true or false.
-			                               // So enable_autopilot = "not_a_boolean" remains.
+			expectEnableAutopilotAttr: nil,
+
+
+
 			expectedRootAttrsRemoved:  []string{},
-			expectedNestedBlocksRemoved: []string{},
+			expectedTopLevelNestedBlocksRemoved: []string{},
+			addonsConfig: &addonsConfigChecks{
+				expectBlockExists:     true,
+				expectDnsCacheRemoved: false, // Should not be removed
+			},
 			expectNoOtherChanges:      true, // No changes should be made
 		},
 		{
@@ -1401,8 +1460,8 @@ resource "google_container_cluster" "partial_autopilot" {
 				}
 			}
 
-			// Check nested blocks removed
-			for _, blockTypeName := range tc.expectedNestedBlocksRemoved {
+			// Check top-level nested blocks removed
+			for _, blockTypeName := range tc.expectedTopLevelNestedBlocksRemoved {
 				// Handle node_pool specifically as multiple can exist
 				if blockTypeName == "node_pool" {
 					foundNodePools := false
@@ -1498,12 +1557,25 @@ resource "google_container_cluster" "partial_autopilot" {
 
 			if tc.expectNoOtherChanges {
 				// This is a simpler check for cases where only enable_autopilot might be removed, or nothing.
-				// It assumes that if expectedRootAttrsRemoved and expectedNestedBlocksRemoved are empty,
-				// and clusterAutoscaling/binaryAuthorization checks are nil or configured for no change,
+				// It assumes that if expectedRootAttrsRemoved and expectedTopLevelNestedBlocksRemoved are empty,
+				// and clusterAutoscaling/binaryAuthorization/addonsConfig checks are nil or configured for no change,
 				// then other parts of the resource block should remain as they were.
 				// A full deep comparison is complex, so this relies on the specific nature of the no-op test cases.
-				// For "enable_autopilot is false", we check that enable_shielded_nodes and node_pool are still there.
 				if tc.name == "enable_autopilot is false, conflicting fields present" {
+					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
+						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot=false' case.")
+					}
+					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+					if addonsCfg == nil {
+						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot=false' case.")
+					} else {
+						if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
+							t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
+						}
+						if addonsCfg.Body().FirstMatchingBlock("http_load_balancing", nil) == nil {
+							t.Errorf("'http_load_balancing' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
+						}
+					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
 						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot=false' case.")
 					}
@@ -1513,6 +1585,15 @@ resource "google_container_cluster" "partial_autopilot" {
 				}
 				// For "enable_autopilot not present", check fields still there
 				if tc.name == "enable_autopilot not present, conflicting fields present" {
+					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
+						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot not present' case.")
+					}
+					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+					if addonsCfg == nil {
+						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot not present' case.")
+					} else if addonsCfg.Body().FirstMatchingBlock("network_policy_config", nil) == nil {
+						t.Errorf("'network_policy_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot not present' case.")
+					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
 						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot not present' case.")
 					}
@@ -1530,6 +1611,15 @@ resource "google_container_cluster" "partial_autopilot" {
 						if string(exprBytes) != `"not_a_boolean"` {
 							t.Errorf("Expected 'enable_autopilot' to remain as \"not_a_boolean\", got %s.", string(exprBytes))
 						}
+					}
+					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
+						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
+					}
+					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+					if addonsCfg == nil {
+						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
+					} else if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
+						t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
 					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
 						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")

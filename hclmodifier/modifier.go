@@ -555,13 +555,18 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 		"remove_default_node_pool",
 		"default_max_pods_per_node",
 		"enable_intranode_visibility",
+		"cluster_ipv4_cidr", // Added as per new requirement
 	}
-	nestedBlocksToRemoveTrue := []string{
+	// These are top-level blocks directly under google_container_cluster
+	topLevelNestedBlocksToRemoveTrue := []string{
+		"network_policy", // Remains top-level removal
+		"node_pool",      // Remains top-level removal
+	}
+	// These are blocks to be removed from within addons_config
+	addonsConfigBlocksToRemove := []string{
 		"network_policy_config",
 		"dns_cache_config",
 		"stateful_ha_config",
-		"network_policy",
-		"node_pool", // Note: This also includes default_node_pool and specific node_pool blocks
 	}
 
 	for _, block := range m.file.Body().Blocks() {
@@ -599,15 +604,8 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						}
 					}
 
-					// Remove defined nested blocks
-					// We need to iterate and remove carefully as Body().Blocks() might change.
-					// A safer way is to collect blocks to remove first or iterate backwards.
-					// However, hclwrite.Body.RemoveBlock takes a direct *hclwrite.Block reference.
-
-					// Iterate over a copy of the nested blocks or find by name repeatedly.
-					// For simplicity, let's find by name for each one.
-					for _, blockName := range nestedBlocksToRemoveTrue {
-						// Need to handle multiple node_pool blocks
+					// Remove defined top-level nested blocks
+					for _, blockName := range topLevelNestedBlocksToRemoveTrue {
 						if blockName == "node_pool" {
 							var nodePoolBlocks []*hclwrite.Block
 							for _, nestedBlock := range block.Body().Blocks() {
@@ -618,26 +616,44 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 							for _, npBlock := range nodePoolBlocks {
 								if removed := block.Body().RemoveBlock(npBlock); removed {
 									modificationCount++
-									m.logger.Debug("Removed nested block", zap.String("blockName", npBlock.Type()), zap.Strings("labels", npBlock.Labels()), zap.String("resourceName", resourceName))
+									m.logger.Debug("Removed top-level nested block (node_pool instance)", zap.String("blockType", npBlock.Type()), zap.Strings("labels", npBlock.Labels()), zap.String("resourceName", resourceName))
 								} else {
-									m.logger.Warn("Failed to remove nested block by reference", zap.String("blockName", npBlock.Type()), zap.String("resourceName", resourceName))
+									m.logger.Warn("Failed to remove node_pool block by reference", zap.String("blockName", npBlock.Type()), zap.String("resourceName", resourceName))
 								}
 							}
 						} else {
-							// For other uniquely named nested blocks
+							// For other uniquely named top-level nested blocks (e.g., network_policy)
 							if nestedBlock := block.Body().FirstMatchingBlock(blockName, nil); nestedBlock != nil {
 								if removed := block.Body().RemoveBlock(nestedBlock); removed {
 									modificationCount++
-									m.logger.Debug("Removed nested block", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+									m.logger.Debug("Removed top-level nested block", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
 								} else {
-									m.logger.Warn("Failed to remove nested block by name", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+									m.logger.Warn("Failed to remove top-level nested block by name", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
 								}
 							} else {
-								m.logger.Debug("Nested block not found, no removal needed", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+								m.logger.Debug("Top-level nested block for removal not found, skipping", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
 							}
 						}
 					}
 
+					// Handle addons_config nested blocks
+					if addonsConfigBlock := block.Body().FirstMatchingBlock("addons_config", nil); addonsConfigBlock != nil {
+						m.logger.Debug("Processing 'addons_config' block", zap.String("resourceName", resourceName))
+						for _, blockNameToRemoveInAddons := range addonsConfigBlocksToRemove {
+							if nestedAddonBlock := addonsConfigBlock.Body().FirstMatchingBlock(blockNameToRemoveInAddons, nil); nestedAddonBlock != nil {
+								if removed := addonsConfigBlock.Body().RemoveBlock(nestedAddonBlock); removed {
+									modificationCount++
+									m.logger.Debug("Removed block from 'addons_config'", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+								} else {
+									m.logger.Warn("Failed to remove block from 'addons_config'", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+								}
+							} else {
+								m.logger.Debug("Block for removal not found in 'addons_config', skipping", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+							}
+						}
+					} else {
+						m.logger.Debug("'addons_config' block not found, skipping removal of its sub-blocks", zap.String("resourceName", resourceName))
+					}
 
 					// Specifically handle cluster_autoscaling
 					if caBlock := block.Body().FirstMatchingBlock("cluster_autoscaling", nil); caBlock != nil {
