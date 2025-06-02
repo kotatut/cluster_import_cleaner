@@ -152,6 +152,212 @@ resource "aws_instance" "example2" {
 	}
 }
 
+func TestApplyRuleRemoveNodeVersion(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	tests := []struct {
+		name                            string
+		hclContent                      string
+		expectedModifications           int
+		resourceLabelsToVerify          []string // e.g. {"google_container_cluster", "primary"}
+		expectNodeVersionRemoved        bool
+		expectMinMasterVersionPresent   bool     // Whether min_master_version should be present after rule application
+		originalMinMasterVersionPresent bool // Whether min_master_version was present in the input
+	}{
+		{
+			name: "node_version and min_master_version both present",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  location           = "us-central1"
+  node_version       = "1.25.0-gke.100"
+  min_master_version = "1.25.0"
+}`,
+			expectedModifications:           1,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			expectNodeVersionRemoved:        true,
+			expectMinMasterVersionPresent:   true,
+			originalMinMasterVersionPresent: true,
+		},
+		{
+			name: "Only node_version present",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  location           = "us-central1"
+  node_version       = "1.25.0-gke.100"
+}`,
+			expectedModifications:           0,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			expectNodeVersionRemoved:        false,
+			expectMinMasterVersionPresent:   false,
+			originalMinMasterVersionPresent: false,
+		},
+		{
+			name: "Only min_master_version present",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  location           = "us-central1"
+  min_master_version = "1.25.0"
+}`,
+			expectedModifications:           0,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			expectNodeVersionRemoved:        false, // No node_version to remove
+			expectMinMasterVersionPresent:   true,
+			originalMinMasterVersionPresent: true,
+		},
+		{
+			name: "Neither node_version nor min_master_version present",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name     = "primary-cluster"
+  location = "us-central1"
+}`,
+			expectedModifications:           0,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			expectNodeVersionRemoved:        false,
+			expectMinMasterVersionPresent:   false,
+			originalMinMasterVersionPresent: false,
+		},
+		{
+			name: "Non-google_container_cluster resource with both versions",
+			hclContent: `resource "google_compute_instance" "test_vm" {
+  name               = "test-vm"
+  node_version       = "1.25.0-gke.100"
+  min_master_version = "1.25.0"
+}`,
+			expectedModifications:           0,
+			resourceLabelsToVerify:          []string{"google_compute_instance", "test_vm"},
+			expectNodeVersionRemoved:        false,
+			expectMinMasterVersionPresent:   true, // Should remain as it's not the target resource
+			originalMinMasterVersionPresent: true,
+		},
+		{
+			name: "google_container_cluster with versions among other attributes and blocks",
+			hclContent: `resource "google_container_cluster" "complex" {
+  name               = "complex-cluster"
+  location           = "us-east1"
+  description        = "A complex cluster"
+  node_version       = "1.26.0-gke.200"
+  min_master_version = "1.26.0"
+  initial_node_count = 1
+  ip_allocation_policy {}
+}`,
+			expectedModifications:           1,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "complex"},
+			expectNodeVersionRemoved:        true,
+			expectMinMasterVersionPresent:   true,
+			originalMinMasterVersionPresent: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_node_version_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			// No defer os.Remove(tmpFile.Name()) here to inspect on failure
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]Rule{RuleRemoveNodeVersion})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			// Verify the HCL content
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
+			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				resourceName := tc.resourceLabelsToVerify[1]
+				targetBlock, _ := findBlockInParsedFile(verifiedFile, blockType, resourceName)
+
+				if targetBlock == nil {
+					// If we expected modifications, or if the original block was supposed to exist, then failing to find it is an error.
+					if tc.expectedModifications > 0 || tc.hclContent != "" { // Simple check if original HCL wasn't empty
+						t.Fatalf("Target resource block '%s' '%s' not found in modified HCL. Modified HCL:\n%s", blockType, resourceName, string(modifiedContentBytes))
+					}
+					// If no modifications expected and target block not found, it might be okay if original HCL was empty or didn't contain it.
+					// This part of the check might need refinement based on how findBlockInParsedFile handles "not found".
+					return // Nothing more to check if block isn't there
+				}
+
+				nodeVersionAttr := targetBlock.Body().GetAttribute("node_version")
+				minMasterVersionAttr := targetBlock.Body().GetAttribute("min_master_version")
+
+				if tc.expectNodeVersionRemoved {
+					if nodeVersionAttr != nil {
+						t.Errorf("Expected 'node_version' to be REMOVED from resource '%s' '%s', but it was FOUND. Modified HCL:\n%s",
+							blockType, resourceName, string(modifiedContentBytes))
+					}
+				} else {
+					// If not expected to be removed, it should be present if it was in the original HCL.
+					originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+					originalTargetBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, resourceName)
+					if originalTargetBlock != nil && originalTargetBlock.Body().GetAttribute("node_version") != nil {
+						if nodeVersionAttr == nil {
+							t.Errorf("Expected 'node_version' to be PRESENT in resource '%s' '%s', but it was NOT FOUND. Modified HCL:\n%s",
+								blockType, resourceName, string(modifiedContentBytes))
+						}
+					} else if nodeVersionAttr != nil {
+						// If it wasn't in original but is now present, that's also an issue.
+						t.Errorf("'node_version' was unexpectedly ADDED to resource '%s' '%s'. Modified HCL:\n%s",
+							blockType, resourceName, string(modifiedContentBytes))
+					}
+				}
+
+				if tc.expectMinMasterVersionPresent {
+					if minMasterVersionAttr == nil {
+						t.Errorf("Expected 'min_master_version' to be PRESENT in resource '%s' '%s', but it was NOT FOUND. Modified HCL:\n%s",
+							blockType, resourceName, string(modifiedContentBytes))
+					}
+				} else {
+					// If not expected to be present (e.g. it was never there, or rule should not affect it)
+					if tc.originalMinMasterVersionPresent && minMasterVersionAttr == nil {
+						// This case should only happen if the rule incorrectly removed it.
+						// For this specific rule, min_master_version should never be removed.
+						t.Errorf("'min_master_version' was expected to be present (as it was in original and rule should not remove it) but was NOT FOUND in resource '%s' '%s'. Modified HCL:\n%s",
+							blockType, resourceName, string(modifiedContentBytes))
+					} else if !tc.originalMinMasterVersionPresent && minMasterVersionAttr != nil {
+						t.Errorf("'min_master_version' was unexpectedly ADDED to resource '%s' '%s'. Modified HCL:\n%s",
+							blockType, resourceName, string(modifiedContentBytes))
+					}
+				}
+			}
+			if tc.expectedModifications > 0 || len(errs) > 0 {
+				// t.Logf("Test %s: HCL after modification for inspection:\n%s", tc.name, string(modifier.File().Bytes()))
+			} else {
+				os.Remove(tmpFile.Name()) // Clean up if test passed and no modifications/errors
+			}
+		})
+	}
+}
+
 // Helper struct for node pool checks
 type nodePoolCheck struct {
 	nodePoolName                  string

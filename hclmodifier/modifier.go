@@ -629,6 +629,28 @@ var RuleRemoveMonitoringService = Rule{
 	},
 }
 
+// RuleRemoveNodeVersion defines a rule to remove node_version if min_master_version is also present.
+var RuleRemoveNodeVersion = Rule{
+	Name:               "Remove node_version if min_master_version exists",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: AttributeExists,
+			Path: []string{"node_version"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"min_master_version"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"node_version"},
+		},
+	},
+}
+
 // --- Rule Engine Structures and Processor Signature ---
 
 // ConditionType defines the type of condition to check.
