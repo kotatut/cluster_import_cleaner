@@ -316,46 +316,87 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 // 4. Log information about the process.
 // 5. Return the total count of modifications and any error.
 func (m *Modifier) ApplyRule1() (modifications int, err error) {
-	// High-level "Applying Rule X..." is now handled by the caller in cmd/root.go
-	// m.logger.Info("Applying Rule 1 using the new rule engine.")
+	m.logger.Info("Starting ApplyRule1 (direct helper method usage)")
+	modificationCount := 0
+	var firstError error
 
-	rule1 := Rule{
-		Name:               "Rule 1: Remove cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists",
-		TargetResourceType: "google_container_cluster",
-		// TargetResourceLabels: nil, // This means it applies to all resources of TargetResourceType
-		Conditions: []RuleCondition{
-			{
-				Type: AttributeExists,
-				Path: []string{"cluster_ipv4_cidr"},
-			},
-			{
-				Type: BlockExists,
-				Path: []string{"ip_allocation_policy"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"ip_allocation_policy", "cluster_ipv4_cidr_block"},
-			},
-		},
-		Actions: []RuleAction{
-			{
-				Type: RemoveAttribute,
-				Path: []string{"cluster_ipv4_cidr"},
-			},
-		},
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyRule1: Modifier's file or file body is nil.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
 	}
 
-	mods, errs := m.ApplyRules([]Rule{rule1})
+	for _, block := range m.file.Body().Blocks() {
+		// Rule 2: Identify `resource` blocks with type `google_container_cluster`.
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			resLogger := m.logger.With(zap.String("resourceName", resourceName), zap.String("rule", "ApplyRule1"))
+			resLogger.Debug("Checking 'google_container_cluster' resource")
 
-	if len(errs) > 0 {
-		// For consistency with the old signature, return the first error.
-		// The ApplyRules method already logs all errors.
-		return mods, errs[0]
+			// Rule 3a: Check for `cluster_ipv4_cidr` attribute using GetAttribute.
+			mainClusterCIDRAttribute, errAttrMain := m.GetAttribute(block, "cluster_ipv4_cidr")
+			if errAttrMain != nil {
+				// GetAttribute returns an error if not found. Log as debug, as not finding it is part of the rule logic.
+				resLogger.Debug("Attribute 'cluster_ipv4_cidr' not found in main block or error fetching.", zap.Error(errAttrMain))
+				// Continue to next block if it's an unexpected error, or if attribute simply not found.
+			}
+
+			// Rule 3b: Check for `ip_allocation_policy` nested block.
+			var ipAllocationPolicyBlock *hclwrite.Block
+			for _, nestedBlock := range block.Body().Blocks() {
+				if nestedBlock.Type() == "ip_allocation_policy" {
+					ipAllocationPolicyBlock = nestedBlock
+					resLogger.Debug("Found 'ip_allocation_policy' block")
+					break
+				}
+			}
+
+			// Rule 3c: If `ip_allocation_policy` exists, check for `cluster_ipv4_cidr_block` attribute within it.
+			var nestedClusterCIDRAttribute *hclwrite.Attribute
+			if ipAllocationPolicyBlock != nil {
+				var errAttrNested error
+				nestedClusterCIDRAttribute, errAttrNested = m.GetAttribute(ipAllocationPolicyBlock, "cluster_ipv4_cidr_block")
+				if errAttrNested != nil {
+					resLogger.Debug("Attribute 'cluster_ipv4_cidr_block' not found in 'ip_allocation_policy' or error fetching.", zap.Error(errAttrNested))
+				} else if nestedClusterCIDRAttribute != nil {
+					resLogger.Debug("Found 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'")
+				}
+			}
+
+			// Rule 3d: If both attributes are found (i.e., GetAttribute returned them without error),
+			// remove `cluster_ipv4_cidr` from the main block.
+			// Note: m.GetAttribute returns error if not found, so mainClusterCIDRAttribute will be nil if errAttrMain is not nil.
+			if mainClusterCIDRAttribute != nil && nestedClusterCIDRAttribute != nil {
+				resLogger.Info("Found 'cluster_ipv4_cidr' in main block and 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'. Removing main one.")
+
+				errRemove := m.RemoveAttribute(block, "cluster_ipv4_cidr")
+				if errRemove != nil {
+					resLogger.Error("Error removing 'cluster_ipv4_cidr' attribute", zap.Error(errRemove))
+					if firstError == nil { // Store the first error encountered
+						firstError = fmt.Errorf("error removing 'cluster_ipv4_cidr' for %s: %w", resourceName, errRemove)
+					}
+					// Continue processing other resources unless error is critical
+				} else {
+					modificationCount++ // Rule 3e: Increment counter
+					resLogger.Info("Removed 'cluster_ipv4_cidr' attribute")
+				}
+			} else {
+				// Optional: More detailed logging if attributes weren't found for the removal condition
+				if mainClusterCIDRAttribute == nil && ipAllocationPolicyBlock != nil && nestedClusterCIDRAttribute == nil {
+					resLogger.Debug("Conditions for removal not met: main 'cluster_ipv4_cidr' or nested 'cluster_ipv4_cidr_block' (or both) are missing.")
+				} else if ipAllocationPolicyBlock == nil && mainClusterCIDRAttribute != nil {
+					resLogger.Debug("Condition for removal not met: 'ip_allocation_policy' block missing.")
+				}
+			}
+		}
 	}
 
-	// Detailed logging of rule execution is handled by ApplyRules.
-	// m.logger.Info("ApplyRule1 (using new engine) finished.", zap.Int("modifications", mods))
-	return mods, nil
+	if firstError != nil {
+		m.logger.Error("ApplyRule1 finished with errors.", zap.Int("modifications", modificationCount), zap.Error(firstError))
+		return modificationCount, firstError
+	}
+
+	m.logger.Info("ApplyRule1 (direct helper method usage) finished successfully.", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
 }
 
 // ApplyMasterCIDRRule implements the logic for managing 'master_ipv4_cidr_block'
@@ -407,10 +448,6 @@ func (m *Modifier) ApplyMasterCIDRRule() (modifications int, err error) {
 
 	// m.logger.Info("ApplyMasterCIDRRule (using new engine) finished.", zap.Int("modifications", mods))
 	return mods, nil
-}
-
-// ApplyInitialNodeCountRule implements the logic for managing 'initial_node_count'
-	return modificationCount, nil
 }
 
 // ApplyInitialNodeCountRule implements the logic for managing 'initial_node_count'
@@ -1039,7 +1076,6 @@ func (m *Modifier) ApplyRules(rules []Rule) (modifications int, errors []error) 
 //    c. If the `enable_autopilot` attribute is not found, log this.
 // 4. Return the total count of modifications and any error encountered.
 func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
-	// m.logger.Info("Starting ApplyAutopilotRule (using path-based helpers).")
 	modificationCount := 0
 	var firstError error
 
@@ -1048,12 +1084,25 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
 	}
 
-	attributesToRemoveTrue := []string{
-		"enable_shielded_nodes", "remove_default_node_pool", "default_max_pods_per_node",
-		"enable_intranode_visibility", "cluster_ipv4_cidr",
+	attributesToRemoveWhenTrue := []string{
+		"cluster_ipv4_cidr",
+		"enable_shielded_nodes",
+		"remove_default_node_pool",
+		"default_max_pods_per_node",
+		"enable_intranode_visibility",
 	}
-	topLevelNestedBlocksToRemoveTrue := []string{"network_policy"} // node_pool handled separately
-	addonsConfigBlocksToRemove := []string{"network_policy_config", "dns_cache_config", "stateful_ha_config"}
+	topLevelNestedBlocksToRemoveWhenTrue := []string{"network_policy"} // node_pool handled separately
+
+	addonsConfigSubBlocksToRemoveWhenTrue := []string{
+		"network_policy_config",
+		"dns_cache_config",
+		"stateful_ha_config",
+	}
+	clusterAutoscalingAttributesToRemoveWhenTrue := []string{"enabled"}
+	// "resource_limits" is a block within cluster_autoscaling
+	clusterAutoscalingSubBlocksToRemoveWhenTrue := []string{"resource_limits"}
+
+	binaryAuthorizationAttributesToRemoveWhenTrue := []string{"enabled"}
 
 	for _, block := range m.file.Body().Blocks() {
 		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
@@ -1061,54 +1110,79 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 			resLogger := m.logger.With(zap.String("resourceName", resourceName), zap.String("rule", "ApplyAutopilotRule"))
 			resLogger.Debug("Checking 'google_container_cluster' resource for Autopilot config.")
 
-			autopilotVal, _, errAttr := m.GetAttributeValueByPath(block.Body(), []string{"enable_autopilot"})
-			if errAttr != nil {
-				resLogger.Debug("Attribute 'enable_autopilot' not found or value error.", zap.Error(errAttr))
+			autopilotVal, autopilotAttr, errAttr := m.GetAttributeValueByPath(block.Body(), []string{"enable_autopilot"})
+			attributeExists := errAttr == nil && autopilotAttr != nil
+
+			if !attributeExists {
+				resLogger.Debug("Attribute 'enable_autopilot' not found. No changes for this resource based on this rule.")
 				continue
 			}
 
-			if autopilotVal.Type() != cty.Bool {
-				resLogger.Warn("'enable_autopilot' attribute is not a boolean value.", zap.String("valueType", autopilotVal.Type().FriendlyName()))
-				continue
+			isAutopilotTrue := false
+			removeEnableAutopilotAttr := false
+
+			if autopilotVal.Type() == cty.Bool {
+				if autopilotVal.True() {
+					isAutopilotTrue = true
+					resLogger.Info("Autopilot enabled. Applying necessary modifications.")
+				} else {
+					// enable_autopilot = false
+					resLogger.Info("Autopilot explicitly disabled. Removing 'enable_autopilot' attribute itself.")
+					removeEnableAutopilotAttr = true
+				}
+			} else {
+				// enable_autopilot is not a boolean (e.g., "not_a_boolean")
+				// Test error message "Expected 'enable_autopilot' attribute to be removed, but it was found."
+				// implies removal is the desired behavior for the attribute state check.
+				resLogger.Warn("'enable_autopilot' attribute is not a boolean value. Removing attribute.", zap.String("valueType", autopilotVal.Type().FriendlyName()))
+				removeEnableAutopilotAttr = true
 			}
 
-			if autopilotVal.True() {
-				resLogger.Info("Autopilot enabled. Applying modifications.")
-
-				// Remove defined top-level attributes
-				for _, attrName := range attributesToRemoveTrue {
-					resLogger.Debug("Attempting to remove attribute.", zap.String("attributeName", attrName))
-					errRemove := m.RemoveAttributeByPath(block.Body(), []string{attrName})
-					if errRemove == nil {
-						// Check if it actually existed by trying to get it again (or rely on RemoveAttributeByPath's internal check if it returns a specific error for not found)
-						// For simplicity, we assume RemoveAttributeByPath is idempotent and doesn't error if not found.
-						// To accurately count, we'd need GetAttributeValueByPath before Remove.
-						// However, the original code incremented if RemoveAttribute did not error (which it doesn't if attr not found).
-						// Let's refine this: only increment if it existed.
-						// For now, let's assume RemoveAttributeByPath would tell us if it did something.
-						// The current RemoveAttributeByPath returns nil if not found, so we can't directly tell if a mod happened.
-						// To match original logic: increment if no error.
-						modificationCount++ // This might overcount if attribute was already gone.
-						resLogger.Info("Removed attribute (or attribute was not present).", zap.String("attributeName", attrName))
-					} else {
-						resLogger.Error("Error removing attribute.", zap.String("attributeName", attrName), zap.Error(errRemove))
+			if removeEnableAutopilotAttr {
+				// Ensure it actually exists before trying to remove (it should, because attributeExists was true)
+				if _, existingAttrCheck, _ := m.GetAttributeValueByPath(block.Body(), []string{"enable_autopilot"}); existingAttrCheck != nil {
+					if errRemove := m.RemoveAttributeByPath(block.Body(), []string{"enable_autopilot"}); errRemove != nil {
+						resLogger.Error("Error removing 'enable_autopilot' attribute.", zap.Error(errRemove))
 						if firstError == nil {
 							firstError = errRemove
+						}
+					} else {
+						modificationCount++
+						resLogger.Info("Successfully removed 'enable_autopilot' (false) attribute.")
+					}
+				}
+				continue // No further processing for this block if enable_autopilot is removed
+			}
+
+			if isAutopilotTrue {
+				// Remove defined top-level attributes IF THEY EXIST
+				for _, attrName := range attributesToRemoveWhenTrue {
+					if _, existingAttr, _ := m.GetAttributeValueByPath(block.Body(), []string{attrName}); existingAttr != nil {
+						resLogger.Debug("Attempting to remove attribute.", zap.String("attributeName", attrName))
+						if errRemove := m.RemoveAttributeByPath(block.Body(), []string{attrName}); errRemove != nil {
+							resLogger.Error("Error removing attribute.", zap.String("attributeName", attrName), zap.Error(errRemove))
+							if firstError == nil {
+								firstError = errRemove
+							}
+						} else {
+							modificationCount++
+							resLogger.Info("Removed attribute.", zap.String("attributeName", attrName))
 						}
 					}
 				}
 
-				// Remove defined top-level nested blocks (excluding node_pool)
-				for _, blockName := range topLevelNestedBlocksToRemoveTrue {
-					resLogger.Debug("Attempting to remove top-level nested block.", zap.String("blockName", blockName))
-					errRemove := m.RemoveNestedBlockByPath(block.Body(), []string{blockName})
-					if errRemove == nil {
-						modificationCount++ // Similar caveat as above for accurate counting
-						resLogger.Info("Removed top-level nested block (or block was not present).", zap.String("blockName", blockName))
-					} else {
-						resLogger.Error("Error removing top-level nested block.", zap.String("blockName", blockName), zap.Error(errRemove))
-						if firstError == nil {
-							firstError = errRemove
+				// Remove defined top-level nested blocks IF THEY EXIST
+				for _, blockName := range topLevelNestedBlocksToRemoveWhenTrue {
+					if existingBlock, _ := m.GetNestedBlock(block.Body(), []string{blockName}); existingBlock != nil {
+						resLogger.Debug("Attempting to remove top-level nested block.", zap.String("blockName", blockName))
+						if errRemove := m.RemoveNestedBlockByPath(block.Body(), []string{blockName}); errRemove != nil {
+							resLogger.Error("Error removing top-level nested block.", zap.String("blockName", blockName), zap.Error(errRemove))
+							if firstError == nil {
+								firstError = errRemove
+							}
+						} else {
+							modificationCount++
+							resLogger.Info("Removed top-level nested block.", zap.String("blockName", blockName))
 						}
 					}
 				}
@@ -1123,94 +1197,91 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 				if len(nodePoolBlocksToRemove) > 0 {
 					resLogger.Debug("Attempting to remove all 'node_pool' blocks.", zap.Int("count", len(nodePoolBlocksToRemove)))
 					for _, npBlock := range nodePoolBlocksToRemove {
-						if removed := block.Body().RemoveBlock(npBlock); removed {
-							modificationCount++
-							resLogger.Info("Removed 'node_pool' block instance.", zap.Strings("labels", npBlock.Labels()))
-						} else {
-							errRemove := fmt.Errorf("failed to remove node_pool block instance (labels: %v)", npBlock.Labels())
-							resLogger.Error("Error removing 'node_pool' block instance.", zap.Error(errRemove))
-							if firstError == nil {
-								firstError = errRemove
+						if block.Body().FirstMatchingBlock("node_pool", npBlock.Labels()) != nil {
+							if removed := block.Body().RemoveBlock(npBlock); removed {
+								modificationCount++
+								resLogger.Info("Removed 'node_pool' block instance.", zap.Strings("labels", npBlock.Labels()))
+							} else {
+								errRemoveNP := fmt.Errorf("failed to remove node_pool block instance (labels: %v)", npBlock.Labels())
+								resLogger.Error("Error removing 'node_pool' block instance.", zap.Error(errRemoveNP))
+								if firstError == nil {
+									firstError = errRemoveNP
+								}
 							}
 						}
 					}
 				}
 
-
 				// Handle addons_config sub-blocks
-				addonsConfigBlock, errGetAddons := m.GetNestedBlock(block.Body(), []string{"addons_config"})
-				if errGetAddons == nil && addonsConfigBlock != nil {
+				if addonsConfigBlock, errGetAddons := m.GetNestedBlock(block.Body(), []string{"addons_config"}); errGetAddons == nil && addonsConfigBlock != nil {
 					resLogger.Debug("Processing 'addons_config' for sub-block removal.")
-					for _, subBlockName := range addonsConfigBlocksToRemove {
-						errRemove := m.RemoveNestedBlockByPath(addonsConfigBlock.Body(), []string{subBlockName})
-						if errRemove == nil {
-							modificationCount++
-							resLogger.Info("Removed sub-block from 'addons_config'.", zap.String("subBlockName", subBlockName))
-						} else {
-							resLogger.Error("Error removing sub-block from 'addons_config'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
-							if firstError == nil {
-								firstError = errRemove
+					for _, subBlockName := range addonsConfigSubBlocksToRemoveWhenTrue {
+						if existingSubBlock, _ := m.GetNestedBlock(addonsConfigBlock.Body(), []string{subBlockName}); existingSubBlock != nil {
+							if errRemove := m.RemoveNestedBlockByPath(addonsConfigBlock.Body(), []string{subBlockName}); errRemove != nil {
+								resLogger.Error("Error removing sub-block from 'addons_config'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
+								if firstError == nil {
+									firstError = errRemove
+								}
+							} else {
+								modificationCount++
+								resLogger.Info("Removed sub-block from 'addons_config'.", zap.String("subBlockName", subBlockName))
 							}
 						}
 					}
-				} else if errGetAddons != nil {
+				} else if errGetAddons != nil && len(addonsConfigSubBlocksToRemoveWhenTrue) > 0 { // Only log if we intended to remove something
 					resLogger.Debug("'addons_config' block not found, skipping removal of its sub-blocks.", zap.Error(errGetAddons))
 				}
 
-				// Handle cluster_autoscaling attributes
-				caBlock, errGetCA := m.GetNestedBlock(block.Body(), []string{"cluster_autoscaling"})
-				if errGetCA == nil && caBlock != nil {
-					resLogger.Debug("Processing 'cluster_autoscaling' for attribute removal.")
-					attrsToRmFromCA := []string{"enabled", "resource_limits"}
-					for _, attrName := range attrsToRmFromCA {
-						errRemove := m.RemoveAttributeByPath(caBlock.Body(), []string{attrName})
-						if errRemove == nil {
-							modificationCount++
-							resLogger.Info("Removed attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName))
-						} else {
-							// Log error but continue, as per original logic (RemoveAttribute doesn't fail if attr missing)
-							resLogger.Error("Error removing attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName), zap.Error(errRemove))
-							if firstError == nil { firstError = errRemove }
+				// Handle cluster_autoscaling attributes and sub-blocks
+				if caBlock, errGetCA := m.GetNestedBlock(block.Body(), []string{"cluster_autoscaling"}); errGetCA == nil && caBlock != nil {
+					resLogger.Debug("Processing 'cluster_autoscaling'.")
+					for _, attrName := range clusterAutoscalingAttributesToRemoveWhenTrue {
+						if _, existingAttr, _ := m.GetAttributeValueByPath(caBlock.Body(), []string{attrName}); existingAttr != nil {
+							if errRemove := m.RemoveAttributeByPath(caBlock.Body(), []string{attrName}); errRemove != nil {
+								resLogger.Error("Error removing attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName), zap.Error(errRemove))
+								if firstError == nil {	firstError = errRemove }
+							} else {
+								modificationCount++
+								resLogger.Info("Removed attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName))
+							}
 						}
 					}
-				} else if errGetCA != nil {
+					for _, subBlockName := range clusterAutoscalingSubBlocksToRemoveWhenTrue {
+						if existingSubBlock, _ := m.GetNestedBlock(caBlock.Body(), []string{subBlockName}); existingSubBlock != nil {
+							if errRemove := m.RemoveNestedBlockByPath(caBlock.Body(), []string{subBlockName}); errRemove != nil {
+								resLogger.Error("Error removing sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
+								if firstError == nil { firstError = errRemove }
+							} else {
+								modificationCount++
+								resLogger.Info("Removed sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName))
+							}
+						}
+					}
+				} else if errGetCA != nil && (len(clusterAutoscalingAttributesToRemoveWhenTrue) > 0 || len(clusterAutoscalingSubBlocksToRemoveWhenTrue) > 0) {
 					resLogger.Debug("'cluster_autoscaling' block not found.", zap.Error(errGetCA))
 				}
 
 				// Handle binary_authorization attributes
-				baBlock, errGetBA := m.GetNestedBlock(block.Body(), []string{"binary_authorization"})
-				if errGetBA == nil && baBlock != nil {
+				if baBlock, errGetBA := m.GetNestedBlock(block.Body(), []string{"binary_authorization"}); errGetBA == nil && baBlock != nil {
 					resLogger.Debug("Processing 'binary_authorization' for attribute removal.")
-					errRemove := m.RemoveAttributeByPath(baBlock.Body(), []string{"enabled"})
-					if errRemove == nil {
-						modificationCount++
-						resLogger.Info("Removed 'enabled' attribute from 'binary_authorization'.")
-					} else {
-						resLogger.Error("Error removing 'enabled' attribute from 'binary_authorization'.", zap.Error(errRemove))
-						if firstError == nil { firstError = errRemove }
+					for _, attrName := range binaryAuthorizationAttributesToRemoveWhenTrue {
+						if _, existingAttr, _ := m.GetAttributeValueByPath(baBlock.Body(), []string{attrName}); existingAttr != nil {
+							if errRemove := m.RemoveAttributeByPath(baBlock.Body(), []string{attrName}); errRemove != nil {
+								resLogger.Error("Error removing attribute from 'binary_authorization'.", zap.String("attributeName", attrName), zap.Error(errRemove))
+								if firstError == nil { firstError = errRemove }
+							} else {
+								modificationCount++
+								resLogger.Info("Removed attribute from 'binary_authorization'.", zap.String("attributeName", attrName))
+							}
+						}
 					}
-				} else if errGetBA != nil {
+				} else if errGetBA != nil && len(binaryAuthorizationAttributesToRemoveWhenTrue) > 0 {
 					resLogger.Debug("'binary_authorization' block not found.", zap.Error(errGetBA))
-				}
-
-			} else { // enable_autopilot is false
-				resLogger.Info("Autopilot explicitly disabled. Removing 'enable_autopilot' attribute itself.")
-				errRemove := m.RemoveAttributeByPath(block.Body(), []string{"enable_autopilot"})
-				if errRemove == nil {
-					modificationCount++
-					resLogger.Info("Successfully removed 'enable_autopilot' (false) attribute.")
-				} else {
-					resLogger.Error("Error removing 'enable_autopilot' (false) attribute.", zap.Error(errRemove))
-					if firstError == nil {
-						firstError = errRemove
-					}
 				}
 			}
 		}
 	}
 
-	// Caller in cmd/root.go logs completion and modifications.
-	// m.logger.Info("ApplyAutopilotRule finished.", zap.Int("modifications", modificationCount))
 	if firstError != nil {
 		m.logger.Error("ApplyAutopilotRule encountered errors during processing.", zap.Error(firstError))
 	}
