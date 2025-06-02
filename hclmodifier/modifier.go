@@ -303,9 +303,36 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 	return removedCount, nil
 }
 
-// ApplyRule1 implements the logic for Rule 1:
-// 1. Iterate through all blocks.
-// 2. Identify `resource` blocks with type `google_container_cluster`.
+// Rule1Definition defines the logic for Rule 1 as a struct.
+// Rule 1: If both `cluster_ipv4_cidr` (main block) and `ip_allocation_policy.cluster_ipv4_cidr_block` (nested) are found,
+// remove `cluster_ipv4_cidr` from the main block for "google_container_cluster" resources.
+var Rule1Definition = Rule{
+	Name:               "Rule 1: Remove cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: AttributeExists,
+			Path: []string{"cluster_ipv4_cidr"},
+		},
+		{
+			Type: BlockExists,
+			Path: []string{"ip_allocation_policy"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"ip_allocation_policy", "cluster_ipv4_cidr_block"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"cluster_ipv4_cidr"},
+		},
+	},
+}
+
+// ApplyRule1 implements the logic for Rule 1 using the generic ApplyRules engine.
+// Original detailed comments moved to Rule1Definition.
 // 3. For each such block:
 //    a. Check for `cluster_ipv4_cidr` attribute.
 //    b. Check for `ip_allocation_policy` nested block.
@@ -316,91 +343,44 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 // 4. Log information about the process.
 // 5. Return the total count of modifications and any error.
 func (m *Modifier) ApplyRule1() (modifications int, err error) {
-	m.logger.Info("Starting ApplyRule1 (direct helper method usage)")
-	modificationCount := 0
-	var firstError error
-
-	if m.file == nil || m.file.Body() == nil {
-		m.logger.Error("ApplyRule1: Modifier's file or file body is nil.")
-		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	m.logger.Info("Applying Rule 1 using the generic ApplyRules engine.")
+	mods, errs := m.ApplyRules([]Rule{Rule1Definition})
+	if len(errs) > 0 {
+		m.logger.Error("Error(s) applying Rule1Definition.", zap.Errors("errors", errs))
+		return mods, fmt.Errorf("errors applying Rule1Definition: %v", errs)
 	}
-
-	for _, block := range m.file.Body().Blocks() {
-		// Rule 2: Identify `resource` blocks with type `google_container_cluster`.
-		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
-			resourceName := block.Labels()[1]
-			resLogger := m.logger.With(zap.String("resourceName", resourceName), zap.String("rule", "ApplyRule1"))
-			resLogger.Debug("Checking 'google_container_cluster' resource")
-
-			// Rule 3a: Check for `cluster_ipv4_cidr` attribute using GetAttribute.
-			mainClusterCIDRAttribute, errAttrMain := m.GetAttribute(block, "cluster_ipv4_cidr")
-			if errAttrMain != nil {
-				// GetAttribute returns an error if not found. Log as debug, as not finding it is part of the rule logic.
-				resLogger.Debug("Attribute 'cluster_ipv4_cidr' not found in main block or error fetching.", zap.Error(errAttrMain))
-				// Continue to next block if it's an unexpected error, or if attribute simply not found.
-			}
-
-			// Rule 3b: Check for `ip_allocation_policy` nested block.
-			var ipAllocationPolicyBlock *hclwrite.Block
-			for _, nestedBlock := range block.Body().Blocks() {
-				if nestedBlock.Type() == "ip_allocation_policy" {
-					ipAllocationPolicyBlock = nestedBlock
-					resLogger.Debug("Found 'ip_allocation_policy' block")
-					break
-				}
-			}
-
-			// Rule 3c: If `ip_allocation_policy` exists, check for `cluster_ipv4_cidr_block` attribute within it.
-			var nestedClusterCIDRAttribute *hclwrite.Attribute
-			if ipAllocationPolicyBlock != nil {
-				var errAttrNested error
-				nestedClusterCIDRAttribute, errAttrNested = m.GetAttribute(ipAllocationPolicyBlock, "cluster_ipv4_cidr_block")
-				if errAttrNested != nil {
-					resLogger.Debug("Attribute 'cluster_ipv4_cidr_block' not found in 'ip_allocation_policy' or error fetching.", zap.Error(errAttrNested))
-				} else if nestedClusterCIDRAttribute != nil {
-					resLogger.Debug("Found 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'")
-				}
-			}
-
-			// Rule 3d: If both attributes are found (i.e., GetAttribute returned them without error),
-			// remove `cluster_ipv4_cidr` from the main block.
-			// Note: m.GetAttribute returns error if not found, so mainClusterCIDRAttribute will be nil if errAttrMain is not nil.
-			if mainClusterCIDRAttribute != nil && nestedClusterCIDRAttribute != nil {
-				resLogger.Info("Found 'cluster_ipv4_cidr' in main block and 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'. Removing main one.")
-
-				errRemove := m.RemoveAttribute(block, "cluster_ipv4_cidr")
-				if errRemove != nil {
-					resLogger.Error("Error removing 'cluster_ipv4_cidr' attribute", zap.Error(errRemove))
-					if firstError == nil { // Store the first error encountered
-						firstError = fmt.Errorf("error removing 'cluster_ipv4_cidr' for %s: %w", resourceName, errRemove)
-					}
-					// Continue processing other resources unless error is critical
-				} else {
-					modificationCount++ // Rule 3e: Increment counter
-					resLogger.Info("Removed 'cluster_ipv4_cidr' attribute")
-				}
-			} else {
-				// Optional: More detailed logging if attributes weren't found for the removal condition
-				if mainClusterCIDRAttribute == nil && ipAllocationPolicyBlock != nil && nestedClusterCIDRAttribute == nil {
-					resLogger.Debug("Conditions for removal not met: main 'cluster_ipv4_cidr' or nested 'cluster_ipv4_cidr_block' (or both) are missing.")
-				} else if ipAllocationPolicyBlock == nil && mainClusterCIDRAttribute != nil {
-					resLogger.Debug("Condition for removal not met: 'ip_allocation_policy' block missing.")
-				}
-			}
-		}
-	}
-
-	if firstError != nil {
-		m.logger.Error("ApplyRule1 finished with errors.", zap.Int("modifications", modificationCount), zap.Error(firstError))
-		return modificationCount, firstError
-	}
-
-	m.logger.Info("ApplyRule1 (direct helper method usage) finished successfully.", zap.Int("modifications", modificationCount))
-	return modificationCount, nil
+	m.logger.Info("Rule 1 applied successfully.", zap.Int("modifications", mods))
+	return mods, nil
 }
 
-// ApplyMasterCIDRRule implements the logic for managing 'master_ipv4_cidr_block'
-// and 'private_cluster_config.private_endpoint_subnetwork' attributes within 'google_container_cluster' resources.
+// MasterCIDRRuleDefinition defines the logic for MasterCIDRRule.
+var MasterCIDRRuleDefinition = Rule{
+	Name:               "MasterCIDRRule: Remove private_endpoint_subnetwork if master_ipv4_cidr_block and private_cluster_config exist",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: AttributeExists,
+			Path: []string{"master_ipv4_cidr_block"},
+		},
+		{
+			Type: BlockExists,
+			Path: []string{"private_cluster_config"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
+		},
+	},
+}
+
+// ApplyMasterCIDRRule implements the logic for MasterCIDRRule using the generic ApplyRules engine.
+// Original detailed comments moved to MasterCIDRRuleDefinition.
 // 1. Initialize modificationCount to 0.
 // 2. Log the start of the rule application.
 // 3. Iterate through all 'resource' blocks of type 'google_container_cluster'.
@@ -413,41 +393,22 @@ func (m *Modifier) ApplyRule1() (modifications int, err error) {
 // 5. Log actions and increment modificationCount.
 // 6. Log completion and return modificationCount.
 func (m *Modifier) ApplyMasterCIDRRule() (modifications int, err error) {
-	// m.logger.Info("Applying MasterCIDRRule using the new rule engine.")
-
-	masterCIDRRule := Rule{
-		Name:               "MasterCIDRRule: Remove private_endpoint_subnetwork if master_ipv4_cidr_block and private_cluster_config exist",
-		TargetResourceType: "google_container_cluster",
-		Conditions: []RuleCondition{
-			{
-				Type: AttributeExists,
-				Path: []string{"master_ipv4_cidr_block"},
-			},
-			{
-				Type: BlockExists,
-				Path: []string{"private_cluster_config"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
-			},
-		},
-		Actions: []RuleAction{
-			{
-				Type: RemoveAttribute,
-				Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
-			},
-		},
-	}
-
-	mods, errs := m.ApplyRules([]Rule{masterCIDRRule})
-
+	m.logger.Info("Applying MasterCIDRRule using the generic ApplyRules engine.")
+	mods, errs := m.ApplyRules([]Rule{MasterCIDRRuleDefinition})
 	if len(errs) > 0 {
-		return mods, errs[0]
+		m.logger.Error("Error(s) applying MasterCIDRRuleDefinition.", zap.Errors("errors", errs))
+		return mods, fmt.Errorf("errors applying MasterCIDRRuleDefinition: %v", errs)
 	}
-
-	// m.logger.Info("ApplyMasterCIDRRule (using new engine) finished.", zap.Int("modifications", mods))
+	m.logger.Info("MasterCIDRRule applied successfully.", zap.Int("modifications", mods))
 	return mods, nil
+}
+
+// InitialNodeCountRuleDefinition is a placeholder for the InitialNodeCountRule.
+// The current ApplyRules engine may not fully support its complex logic (iteration over node_pools).
+// Thus, ApplyInitialNodeCountRule will continue to use its direct implementation.
+var InitialNodeCountRuleDefinition = Rule{
+	Name:               "InitialNodeCountRule: Placeholder - Complex logic handled by ApplyInitialNodeCountRule",
+	TargetResourceType: "google_container_cluster",
 }
 
 // ApplyInitialNodeCountRule implements the logic for managing 'initial_node_count'
@@ -515,9 +476,34 @@ func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
 	return modificationCount, firstError
 }
 
-// ApplyRule2 implements the logic for Rule 2:
-// 1. Iterate through all blocks.
-// 2. Identify `resource` blocks with type `google_container_cluster`.
+// Rule2Definition defines the logic for Rule 2.
+var Rule2Definition = Rule{
+	Name:               "Rule 2: Remove services_ipv4_cidr_block if cluster_secondary_range_name exists in ip_allocation_policy",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: BlockExists, // Ensure ip_allocation_policy block exists first
+			Path: []string{"ip_allocation_policy"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"ip_allocation_policy", "cluster_secondary_range_name"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
+		},
+	},
+}
+
+// ApplyRule2 implements the logic for Rule 2 using the generic ApplyRules engine.
+// Original detailed comments moved to Rule2Definition.
 // 3. For each such block:
 //    a. Find the `ip_allocation_policy` nested block.
 //    b. If `ip_allocation_policy` block exists:
@@ -528,47 +514,44 @@ func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
 // 4. Log information.
 // 5. Return total modifications and any error.
 func (m *Modifier) ApplyRule2() (modifications int, err error) {
-	// m.logger.Info("Applying Rule 2 using the new rule engine.")
-
-	rule2 := Rule{
-		Name:               "Rule 2: Remove services_ipv4_cidr_block if cluster_secondary_range_name exists in ip_allocation_policy",
-		TargetResourceType: "google_container_cluster",
-		// TargetResourceLabels: nil, // Applies to all resources of TargetResourceType
-		Conditions: []RuleCondition{
-			{
-				Type: BlockExists, // Ensure ip_allocation_policy block exists first
-				Path: []string{"ip_allocation_policy"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"ip_allocation_policy", "cluster_secondary_range_name"},
-			},
-		},
-		Actions: []RuleAction{
-			{
-				Type: RemoveAttribute,
-				Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
-			},
-		},
-	}
-
-	mods, errs := m.ApplyRules([]Rule{rule2})
-
+	m.logger.Info("Applying Rule 2 using the generic ApplyRules engine.")
+	mods, errs := m.ApplyRules([]Rule{Rule2Definition})
 	if len(errs) > 0 {
-		return mods, errs[0] // Return first error, ApplyRules logs all
+		m.logger.Error("Error(s) applying Rule2Definition.", zap.Errors("errors", errs))
+		return mods, fmt.Errorf("errors applying Rule2Definition: %v", errs)
 	}
-
-	// m.logger.Info("ApplyRule2 (using new engine) finished.", zap.Int("modifications", mods))
+	m.logger.Info("Rule 2 applied successfully.", zap.Int("modifications", mods))
 	return mods, nil
 }
 
-// ApplyRule3 implements the logic for Rule 3:
-// 1. Iterate through all blocks in the HCL file.
-// 2. Identify `resource` blocks with type `google_container_cluster`.
+// Rule3Definition defines the logic for Rule 3.
+var Rule3Definition = Rule{
+	Name:               "Rule 3: Remove enabled if evaluation_mode exists in binary_authorization",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: BlockExists, // Ensure binary_authorization block exists first
+			Path: []string{"binary_authorization"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"binary_authorization", "enabled"},
+		},
+		{
+			Type: AttributeExists,
+			Path: []string{"binary_authorization", "evaluation_mode"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"binary_authorization", "enabled"},
+		},
+	},
+}
+
+// ApplyRule3 implements the logic for Rule 3 using the generic ApplyRules engine.
+// Original detailed comments moved to Rule3Definition.
 // 3. For each such block:
 //    a. Check for a nested block named `binary_authorization`.
 //    b. If the `binary_authorization` block exists:
@@ -579,42 +562,71 @@ func (m *Modifier) ApplyRule2() (modifications int, err error) {
 // 4. Log information about the process (e.g., "Starting ApplyRule3", "Found 'binary_authorization' block", "Removed 'enabled' attribute").
 // 5. Return the total count of modifications and any error, similar to `ApplyRule1` and `ApplyRule2`.
 func (m *Modifier) ApplyRule3() (modifications int, err error) {
-	// m.logger.Info("Applying Rule 3 using the new rule engine.")
-
-	rule3 := Rule{
-		Name:               "Rule 3: Remove enabled if evaluation_mode exists in binary_authorization",
-		TargetResourceType: "google_container_cluster",
-		// TargetResourceLabels: nil, // Applies to all resources of TargetResourceType
-		Conditions: []RuleCondition{
-			{
-				Type: BlockExists, // Ensure binary_authorization block exists first
-				Path: []string{"binary_authorization"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"binary_authorization", "enabled"},
-			},
-			{
-				Type: AttributeExists,
-				Path: []string{"binary_authorization", "evaluation_mode"},
-			},
-		},
-		Actions: []RuleAction{
-			{
-				Type: RemoveAttribute,
-				Path: []string{"binary_authorization", "enabled"},
-			},
-		},
-	}
-
-	mods, errs := m.ApplyRules([]Rule{rule3})
-
+	m.logger.Info("Applying Rule 3 using the generic ApplyRules engine.")
+	mods, errs := m.ApplyRules([]Rule{Rule3Definition})
 	if len(errs) > 0 {
-		return mods, errs[0] // Return first error, ApplyRules logs all
+		m.logger.Error("Error(s) applying Rule3Definition.", zap.Errors("errors", errs))
+		return mods, fmt.Errorf("errors applying Rule3Definition: %v", errs)
 	}
-
-	// m.logger.Info("ApplyRule3 (using new engine) finished.", zap.Int("modifications", mods))
+	m.logger.Info("Rule 3 applied successfully.", zap.Int("modifications", mods))
 	return mods, nil
+}
+
+// AutopilotRuleDefinition is a placeholder for the AutopilotRule.
+// The current ApplyRules engine may not fully support its complex logic (conditional attribute value checks, multiple different removals).
+// Thus, ApplyAutopilotRule will continue to use its direct implementation.
+var AutopilotRuleDefinition = Rule{
+	Name:               "AutopilotRule: Placeholder - Complex logic handled by ApplyAutopilotRule",
+	TargetResourceType: "google_container_cluster",
+}
+
+// RuleRemoveLoggingService defines a rule to remove logging_service if cluster_telemetry.type is ENABLED.
+var RuleRemoveLoggingService = Rule{
+	Name:               "Remove logging_service if cluster_telemetry.type is ENABLED",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: AttributeExists,
+			Path: []string{"logging_service"},
+		},
+		{
+			Type: BlockExists,
+			Path: []string{"cluster_telemetry"},
+		},
+		{
+			Type:          AttributeValueEquals,
+			Path:          []string{"cluster_telemetry", "type"},
+			ExpectedValue: "ENABLED",
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"logging_service"},
+		},
+	},
+}
+
+// RuleRemoveMonitoringService defines a rule to remove monitoring_service if monitoring_config exists.
+var RuleRemoveMonitoringService = Rule{
+	Name:               "Remove monitoring_service if monitoring_config exists",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []RuleCondition{
+		{
+			Type: AttributeExists,
+			Path: []string{"monitoring_service"},
+		},
+		{
+			Type: BlockExists,
+			Path: []string{"monitoring_config"},
+		},
+	},
+	Actions: []RuleAction{
+		{
+			Type: RemoveAttribute,
+			Path: []string{"monitoring_service"},
+		},
+	},
 }
 
 // --- Rule Engine Structures and Processor Signature ---

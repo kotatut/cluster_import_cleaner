@@ -2511,3 +2511,288 @@ func findNodePoolInBlock(resourceBlock *hclwrite.Block, nodePoolName string, mod
 	}
 	return nil, fmt.Errorf("node_pool with name '%s' not found in the resource", nodePoolName)
 }
+
+func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	tests := []struct {
+		name                  string
+		hclContent            string
+		expectedHCLContent    string
+		expectedModifications int
+		ruleToApply           Rule
+	}{
+		{
+			name: "logging_service should be removed when telemetry is ENABLED",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  logging_service  = "logging.googleapis.com/kubernetes"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedModifications: 1,
+			ruleToApply:           RuleRemoveLoggingService,
+		},
+		{
+			name: "logging_service should NOT be removed when telemetry is DISABLED",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  logging_service  = "logging.googleapis.com/kubernetes"
+  cluster_telemetry {
+    type = "DISABLED"
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  logging_service  = "logging.googleapis.com/kubernetes"
+  cluster_telemetry {
+    type = "DISABLED"
+  }
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveLoggingService,
+		},
+		{
+			name: "logging_service should NOT be removed when telemetry block is missing",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  logging_service  = "logging.googleapis.com/kubernetes"
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  logging_service  = "logging.googleapis.com/kubernetes"
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveLoggingService,
+		},
+		{
+			name: "logging_service should NOT be removed if logging_service attribute is missing",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name             = "my-cluster"
+  location         = "us-central1"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveLoggingService,
+		},
+		{
+			name: "Non-GKE resource with similar structure, should not be modified",
+			hclContent: `resource "google_compute_instance" "primary" {
+  name             = "my-instance"
+  logging_service  = "logging.googleapis.com/kubernetes"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedHCLContent: `resource "google_compute_instance" "primary" {
+  name             = "my-instance"
+  logging_service  = "logging.googleapis.com/kubernetes"
+  cluster_telemetry {
+    type = "ENABLED"
+  }
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveLoggingService,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_logging_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]Rule{tc.ruleToApply})
+			if len(errs) > 0 {
+				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s", errs, tc.hclContent)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			// Normalize and compare HCL content
+			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse expected HCL content: %v\nExpected HCL:\n%s", diags, tc.expectedHCLContent)
+			}
+			expectedNormalized := string(expectedF.Bytes())
+			actualNormalized := string(modifier.File().Bytes())
+
+			if actualNormalized != expectedNormalized {
+				t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
+			}
+		})
+	}
+}
+
+func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	tests := []struct {
+		name                  string
+		hclContent            string
+		expectedHCLContent    string
+		expectedModifications int
+		ruleToApply           Rule
+	}{
+		{
+			name: "monitoring_service should be removed when monitoring_config block exists",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedModifications: 1,
+			ruleToApply:           RuleRemoveMonitoringService,
+		},
+		{
+			name: "monitoring_service should NOT be removed when monitoring_config block is missing",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveMonitoringService,
+		},
+		{
+			name: "monitoring_service should NOT be removed if monitoring_service attribute is missing",
+			hclContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "primary" {
+  name               = "my-cluster"
+  location           = "us-central1"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveMonitoringService,
+		},
+		{
+			name: "Non-GKE resource with similar structure, should not be modified",
+			hclContent: `resource "google_compute_instance" "primary" {
+  name               = "my-instance"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedHCLContent: `resource "google_compute_instance" "primary" {
+  name               = "my-instance"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+  }
+}`,
+			expectedModifications: 0,
+			ruleToApply:           RuleRemoveMonitoringService,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_monitoring_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]Rule{tc.ruleToApply})
+			if len(errs) > 0 {
+				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s", errs, tc.hclContent)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			// Normalize and compare HCL content
+			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse expected HCL content: %v\nExpected HCL:\n%s", diags, tc.expectedHCLContent)
+			}
+			expectedNormalized := string(expectedF.Bytes())
+			actualNormalized := string(modifier.File().Bytes())
+
+			if actualNormalized != expectedNormalized {
+				t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
+			}
+		})
+	}
+}
