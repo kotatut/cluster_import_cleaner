@@ -82,6 +82,17 @@ var rootCmd = &cobra.Command{
 			logger.Info("Rule 3 application completed", zap.Int("modifications", rule3Modifications), zap.String("filePath", filePathVariable))
 		}
 
+		// Apply Autopilot Rule
+		logger.Info("Applying Autopilot Rule...")
+		autopilotModifications, err := hclFile.ApplyAutopilotRule()
+		if err != nil {
+			// ApplyAutopilotRule already logs the detailed error.
+			logger.Error("Error applying Autopilot rule", zap.Error(err), zap.String("filePath", filePathVariable))
+			// Log the error and continue
+		} else {
+			logger.Info("ApplyAutopilotRule completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathVariable))
+		}
+
 		// 4. Write the modified HCL content back to the file using the hclmodifier package.
 		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
