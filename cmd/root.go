@@ -55,6 +55,7 @@ var rootCmd = &cobra.Command{
 			hclmodifier.Rule3Definition,
 			hclmodifier.RuleRemoveLoggingService,
 			hclmodifier.RuleRemoveMonitoringService,
+			hclmodifier.RuleRemoveNodeVersion,
 			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
 			// due to their complex logic not yet fully translated to the generic rule engine.
 		}
