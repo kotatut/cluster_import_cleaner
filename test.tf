@@ -26,7 +26,6 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
   }
 
   binary_authorization {
-    enabled         = "false"
     evaluation_mode = "DISABLED"
   }
 
@@ -35,7 +34,6 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
     enabled             = "false"
   }
 
-  cluster_ipv4_cidr = "10.114.0.0/14"
 
   cluster_telemetry {
     type = "ENABLED"
@@ -59,7 +57,6 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
     disabled = "false"
   }
 
-  enable_autopilot                         = "false"
   enable_cilium_clusterwide_network_policy = "false"
   enable_fqdn_network_policy               = "false"
   enable_intranode_visibility              = "false"
