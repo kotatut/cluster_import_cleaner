@@ -93,6 +93,24 @@ var rootCmd = &cobra.Command{
 			logger.Info("ApplyAutopilotRule completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathVariable))
 		}
 
+		// Apply InitialNodeCount Rule
+		logger.Info("Applying InitialNodeCount Rule...")
+		initialNodeCountModifications, err := hclFile.ApplyInitialNodeCountRule()
+		if err != nil {
+			logger.Error("Error applying InitialNodeCount Rule", zap.Error(err), zap.String("filePath", filePathVariable))
+		} else {
+			logger.Info("InitialNodeCount Rule application completed", zap.Int("modifications", initialNodeCountModifications), zap.String("filePath", filePathVariable))
+		}
+
+		// Apply MasterCIDR Rule
+		logger.Info("Applying MasterCIDR Rule...")
+		masterCIDRModifications, err := hclFile.ApplyMasterCIDRRule()
+		if err != nil {
+			logger.Error("Error applying MasterCIDR Rule", zap.Error(err), zap.String("filePath", filePathVariable))
+		} else {
+			logger.Info("MasterCIDR Rule application completed", zap.Int("modifications", masterCIDRModifications), zap.String("filePath", filePathVariable))
+		}
+
 		// 4. Write the modified HCL content back to the file using the hclmodifier package.
 		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
