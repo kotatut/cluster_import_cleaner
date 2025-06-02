@@ -379,6 +379,131 @@ func (m *Modifier) ApplyRule1() (modifications int, err error) {
 	return modificationCount, nil
 }
 
+// ApplyMasterCIDRRule implements the logic for managing 'master_ipv4_cidr_block'
+// and 'private_cluster_config.private_endpoint_subnetwork' attributes within 'google_container_cluster' resources.
+// 1. Initialize modificationCount to 0.
+// 2. Log the start of the rule application.
+// 3. Iterate through all 'resource' blocks of type 'google_container_cluster'.
+// 4. For each cluster:
+//    a. Check for 'master_ipv4_cidr_block' attribute.
+//    b. Find 'private_cluster_config' nested block.
+//    c. If found, check for 'private_endpoint_subnetwork' attribute within it.
+//    d. If 'master_ipv4_cidr_block' and 'private_cluster_config.private_endpoint_subnetwork' exist,
+//       remove 'private_endpoint_subnetwork'.
+// 5. Log actions and increment modificationCount.
+// 6. Log completion and return modificationCount.
+func (m *Modifier) ApplyMasterCIDRRule() (modifications int, err error) {
+	modificationCount := 0
+	m.logger.Info("Starting ApplyMasterCIDRRule")
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyMasterCIDRRule called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource for Master CIDR rule", zap.String("name", resourceName))
+
+			masterCIDRAttribute := block.Body().GetAttribute("master_ipv4_cidr_block")
+
+			var privateClusterConfigBlock *hclwrite.Block
+			for _, nestedBlock := range block.Body().Blocks() {
+				if nestedBlock.Type() == "private_cluster_config" {
+					privateClusterConfigBlock = nestedBlock
+					m.logger.Debug("Found 'private_cluster_config' block", zap.String("resourceName", resourceName))
+					break
+				}
+			}
+
+			var privateEndpointSubnetworkAttr *hclwrite.Attribute
+			if privateClusterConfigBlock != nil {
+				privateEndpointSubnetworkAttr = privateClusterConfigBlock.Body().GetAttribute("private_endpoint_subnetwork")
+				if privateEndpointSubnetworkAttr != nil {
+					m.logger.Debug("Found 'private_endpoint_subnetwork' in 'private_cluster_config'", zap.String("resourceName", resourceName))
+				}
+			}
+
+			if masterCIDRAttribute != nil && privateClusterConfigBlock != nil && privateEndpointSubnetworkAttr != nil {
+				m.logger.Info("Found 'master_ipv4_cidr_block' in main block and 'private_endpoint_subnetwork' in 'private_cluster_config'",
+					zap.String("resourceName", resourceName),
+					zap.String("attributeToRemove", "private_cluster_config.private_endpoint_subnetwork"))
+
+				privateClusterConfigBlock.Body().RemoveAttribute("private_endpoint_subnetwork")
+				modificationCount++
+				m.logger.Info("Removed 'private_endpoint_subnetwork' attribute from 'private_cluster_config'", zap.String("resourceName", resourceName))
+			} else {
+				if masterCIDRAttribute == nil {
+					m.logger.Debug("Attribute 'master_ipv4_cidr_block' not found", zap.String("resourceName", resourceName))
+				}
+				if privateClusterConfigBlock == nil {
+					m.logger.Debug("'private_cluster_config' block not found", zap.String("resourceName", resourceName))
+				} else if privateEndpointSubnetworkAttr == nil {
+					m.logger.Debug("Attribute 'private_endpoint_subnetwork' not found in 'private_cluster_config' block", zap.String("resourceName", resourceName))
+				}
+			}
+		}
+	}
+
+	m.logger.Info("ApplyMasterCIDRRule finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}
+
+// ApplyInitialNodeCountRule implements the logic for managing 'initial_node_count'
+// and 'node_count' attributes within 'node_pool' blocks of 'google_container_cluster' resources.
+// 1. Initialize modificationCount to 0.
+// 2. Log the start of the rule application.
+// 3. Iterate through all 'resource' blocks of type 'google_container_cluster'.
+// 4. For each cluster, iterate through its 'node_pool' nested blocks.
+// 5. If both 'initial_node_count' and 'node_count' exist, remove 'initial_node_count'.
+// 6. If only 'initial_node_count' exists, remove it.
+// 7. Log actions and increment modificationCount.
+// 8. Log completion and return modificationCount.
+func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
+	modificationCount := 0
+	m.logger.Info("Starting ApplyInitialNodeCountRule")
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyInitialNodeCountRule called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource for initial_node_count rule", zap.String("name", resourceName))
+
+			for _, nodePoolBlock := range block.Body().Blocks() {
+				if nodePoolBlock.Type() == "node_pool" {
+					// Node pools might not have a name label, so we log based on the parent resource.
+					m.logger.Debug("Checking 'node_pool' block", zap.String("resourceName", resourceName))
+
+					initialNodeCountAttr := nodePoolBlock.Body().GetAttribute("initial_node_count")
+					nodeCountAttr := nodePoolBlock.Body().GetAttribute("node_count")
+
+					if initialNodeCountAttr != nil && nodeCountAttr != nil {
+						// Both attributes exist, remove initial_node_count
+						nodePoolBlock.Body().RemoveAttribute("initial_node_count")
+						modificationCount++
+						m.logger.Info("Removed 'initial_node_count' from node_pool because 'node_count' is also present.",
+							zap.String("resourceName", resourceName))
+					} else if initialNodeCountAttr != nil && nodeCountAttr == nil {
+						// Only initial_node_count exists, remove it
+						nodePoolBlock.Body().RemoveAttribute("initial_node_count")
+						modificationCount++
+						m.logger.Info("Removed 'initial_node_count' from node_pool as 'node_count' is not present.",
+							zap.String("resourceName", resourceName))
+					}
+				}
+			}
+		}
+	}
+
+	m.logger.Info("ApplyInitialNodeCountRule finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}
+
 // ApplyRule2 implements the logic for Rule 2:
 // 1. Iterate through all blocks.
 // 2. Identify `resource` blocks with type `google_container_cluster`.

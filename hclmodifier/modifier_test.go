@@ -162,6 +162,913 @@ resource "aws_instance" "example" {
 	}
 }
 
+func TestApplyInitialNodeCountRule(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewNop() // Use NewNop for cleaner test output
+
+	tests := []struct {
+		name                           string
+		hclContent                     string
+		expectedModifications          int
+		gkeResourceName                string // Name of the GKE resource to check
+		nodePoolChecks                 []nodePoolCheck
+		expectNoOtherResourceChanges   bool // If true, implies other resources should be untouched
+		expectNoGKEResource            bool // If true, GKE resource itself is not expected
+	}{
+		{
+			name: "BothCountsPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  node_pool {
+    name               = "default-pool"
+    initial_node_count = 3
+    node_count         = 5
+  }
+}`,
+			expectedModifications: 1,
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "default-pool", // Assuming node_pool has a 'name' attribute for identification in tests
+					expectInitialNodeCountRemoved: true,
+					expectNodeCountPresent:        true,
+					expectedNodeCountValue:        intPtr(5), // We don't change node_count, just verify it's still there
+				},
+			},
+		},
+		{
+			name: "OnlyInitialPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  node_pool {
+    name               = "default-pool"
+    initial_node_count = 2
+  }
+}`,
+			expectedModifications: 1,
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "default-pool",
+					expectInitialNodeCountRemoved: true,
+					expectNodeCountPresent:        false,
+				},
+			},
+		},
+		{
+			name: "OnlyNodeCountPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  node_pool {
+    name       = "default-pool"
+    node_count = 4
+  }
+}`,
+			expectedModifications: 0,
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "default-pool",
+					expectInitialNodeCountRemoved: false, // Was never there
+					expectNodeCountPresent:        true,
+					expectedNodeCountValue:        intPtr(4),
+				},
+			},
+		},
+		{
+			name: "NeitherCountPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  node_pool {
+    name = "default-pool"
+    autoscaling = true
+  }
+}`,
+			expectedModifications: 0,
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "default-pool",
+					expectInitialNodeCountRemoved: false, // Was never there
+					expectNodeCountPresent:        false, // Was never there
+				},
+			},
+		},
+		{
+			name: "MultipleNodePools",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  node_pool { # Pool 1: Both present
+    name               = "pool-one"
+    initial_node_count = 3
+    node_count         = 5
+  }
+  node_pool { # Pool 2: Only initial
+    name               = "pool-two"
+    initial_node_count = 2
+  }
+  node_pool { # Pool 3: Only node_count
+    name       = "pool-three"
+    node_count = 4
+  }
+  node_pool { # Pool 4: Neither
+    name = "pool-four"
+  }
+}`,
+			expectedModifications: 2, // One from pool-one, one from pool-two
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "pool-one",
+					expectInitialNodeCountRemoved: true,
+					expectNodeCountPresent:        true,
+					expectedNodeCountValue:        intPtr(5),
+				},
+				{
+					nodePoolName:               "pool-two",
+					expectInitialNodeCountRemoved: true,
+					expectNodeCountPresent:        false,
+				},
+				{
+					nodePoolName:               "pool-three",
+					expectInitialNodeCountRemoved: false,
+					expectNodeCountPresent:        true,
+					expectedNodeCountValue:        intPtr(4),
+				},
+				{
+					nodePoolName:               "pool-four",
+					expectInitialNodeCountRemoved: false,
+					expectNodeCountPresent:        false,
+				},
+			},
+		},
+		{
+			name: "NoNodePools",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name     = "test-cluster"
+  location = "us-central1"
+}`,
+			expectedModifications: 0,
+			gkeResourceName:       "gke_cluster",
+			nodePoolChecks:        nil, // No node pools to check
+		},
+		{
+			name: "NonGKEResource",
+			hclContent: `
+resource "google_compute_instance" "not_gke" {
+  name = "test-vm"
+  node_pool { # This block would be ignored
+    initial_node_count = 1
+    node_count         = 2
+  }
+  initial_node_count = 5 # This attribute would be ignored
+}`,
+			expectedModifications: 0,
+			gkeResourceName:       "", // No GKE resource to check specifically
+			expectNoOtherResourceChanges: true,
+			nodePoolChecks:               nil, // Or define checks for "google_compute_instance" "not_gke" to ensure it's untouched
+		},
+		{
+			name:                  "EmptyHCL",
+			hclContent:            ``,
+			expectedModifications: 0,
+			gkeResourceName:       "",
+			nodePoolChecks:        nil,
+			expectNoGKEResource:   true,
+		},
+		{
+			name: "MultipleGKEResources",
+			hclContent: `
+resource "google_container_cluster" "gke_one" {
+  name = "cluster-one"
+  node_pool {
+    name               = "gke-one-pool"
+    initial_node_count = 3
+    node_count         = 5
+  }
+}
+resource "google_container_cluster" "gke_two" {
+  name = "cluster-two"
+  node_pool {
+    name               = "gke-two-pool"
+    initial_node_count = 2
+  }
+  node_pool {
+    name       = "gke-two-pool-extra"
+    node_count = 1
+  }
+}`,
+			expectedModifications: 2, // One from gke_one-pool, one from gke_two-pool
+			// We need to check both GKE resources
+			// For simplicity, this test setup might need to be expanded or split
+			// to verify each GKE resource independently if nodePoolChecks only targets one gkeResourceName.
+			// Let's assume for now we check gke_one, and the total count implies gke_two was also handled.
+			// A more robust test would iterate all GKE resources found.
+			gkeResourceName: "gke_one", // Check this one specifically
+			nodePoolChecks: []nodePoolCheck{
+				{
+					nodePoolName:               "gke-one-pool",
+					expectInitialNodeCountRemoved: true,
+					expectNodeCountPresent:        true,
+					expectedNodeCountValue:        intPtr(5),
+				},
+			},
+			// To fully test "MultipleGKEResources", we'd also want to assert on "gke_two"
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_initial_node_count_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				if tc.hclContent == "" && tc.expectedModifications == 0 {
+					if modifier == nil {
+						return // NewFromFile failed as expected for empty content.
+					}
+				} else {
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				}
+			}
+
+			modifications, ruleErr := modifier.ApplyInitialNodeCountRule()
+			if ruleErr != nil {
+				t.Fatalf("ApplyInitialNodeCountRule() error = %v", ruleErr)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyInitialNodeCountRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			// Re-parse the modified HCL content for verification
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
+			if tc.expectNoGKEResource {
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) > 0 && b.Labels()[0] == "google_container_cluster" {
+						t.Errorf("Expected no 'google_container_cluster' resource, but found one: %v. HCL:\n%s", b.Labels(), string(modifiedContentBytes))
+					}
+				}
+				return // No further checks if no GKE resource is expected
+			}
+
+			// Find the specific GKE resource if a name is provided
+			var targetGKEResource *hclwrite.Block
+			if tc.gkeResourceName != "" {
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) == 2 &&
+						b.Labels()[0] == "google_container_cluster" && b.Labels()[1] == tc.gkeResourceName {
+						targetGKEResource = b
+						break
+					}
+				}
+				if targetGKEResource == nil && len(tc.nodePoolChecks) > 0 { // If checks are defined, resource must exist
+					t.Fatalf("Expected 'google_container_cluster' resource '%s' not found for verification. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+				}
+			}
+
+
+			if targetGKEResource != nil && tc.nodePoolChecks != nil {
+				for _, npCheck := range tc.nodePoolChecks {
+					var foundNodePool *hclwrite.Block
+					for _, nestedBlock := range targetGKEResource.Body().Blocks() {
+						if nestedBlock.Type() == "node_pool" {
+							// Assuming node_pool blocks have a 'name' attribute for reliable identification in tests.
+							// If not, this check needs to be adapted (e.g., by order or other unique attributes).
+							nameAttr := nestedBlock.Body().GetAttribute("name")
+							if nameAttr != nil {
+								nameVal, err := modifier.GetAttributeValue(nameAttr) // Use existing modifier for GetAttributeValue
+								if err == nil && nameVal.Type() == cty.String && nameVal.AsString() == npCheck.nodePoolName {
+									foundNodePool = nestedBlock
+									break
+								}
+							} else if npCheck.nodePoolName == "" && len(targetGKEResource.Body().BlocksByType("node_pool")) == 1 {
+								// If no name to check and only one node_pool, assume it's the one.
+								foundNodePool = nestedBlock
+								break
+							}
+						}
+					}
+
+					if foundNodePool == nil {
+						// If we expected a change in this node pool, it should be found.
+						if npCheck.expectInitialNodeCountRemoved || npCheck.expectNodeCountPresent {
+							t.Errorf("Node pool '%s' in resource '%s' not found for verification. Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						}
+						continue // Skip to next node pool check
+					}
+
+					initialAttr := foundNodePool.Body().GetAttribute("initial_node_count")
+					if npCheck.expectInitialNodeCountRemoved {
+						if initialAttr != nil {
+							t.Errorf("Expected 'initial_node_count' to be REMOVED from node_pool '%s' in '%s', but it was FOUND. Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						}
+					} else { // Expect initial_node_count to be present (or absent if it was never there)
+						originalInitialPresent := false // Check original HCL
+						originalGKEResource, _ := findBlockInParsedFile(hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos), "google_container_cluster", tc.gkeResourceName)
+						if originalGKEResource != nil {
+							originalNP, _ := findNodePoolInBlock(originalGKEResource, npCheck.nodePoolName, modifier)
+							if originalNP != nil && originalNP.Body().GetAttribute("initial_node_count") != nil {
+								originalInitialPresent = true
+							}
+						}
+						if originalInitialPresent && initialAttr == nil {
+							t.Errorf("Expected 'initial_node_count' to be PRESENT in node_pool '%s' in '%s', but it was NOT FOUND (removed). Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						}
+						if !originalInitialPresent && initialAttr != nil {
+							t.Errorf("'initial_node_count' was unexpectedly ADDED to node_pool '%s' in '%s'. Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						}
+					}
+
+					nodeCountAttr := foundNodePool.Body().GetAttribute("node_count")
+					if npCheck.expectNodeCountPresent {
+						if nodeCountAttr == nil {
+							t.Errorf("Expected 'node_count' to be PRESENT in node_pool '%s' in '%s', but it was NOT FOUND. Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						} else if npCheck.expectedNodeCountValue != nil {
+							// Verify its value remained unchanged (if it was there)
+							val, err := modifier.GetAttributeValue(nodeCountAttr)
+							if err != nil || !val.IsKnown() || val.IsNull() || val.Type() != cty.Number {
+								t.Errorf("Error or wrong type for 'node_count' in node_pool '%s': %v. Modified HCL:\n%s", npCheck.nodePoolName, err, string(modifiedContentBytes))
+							} else {
+								numVal := val.AsBigFloat()
+								expectedNum := float64(*npCheck.expectedNodeCountValue)
+								if numVal.Float64() != expectedNum {
+									t.Errorf("Expected 'node_count' value %d, got %s in node_pool '%s'. Modified HCL:\n%s",
+										*npCheck.expectedNodeCountValue, val.GoString(), npCheck.nodePoolName, string(modifiedContentBytes))
+								}
+							}
+						}
+					} else { // Expect node_count to be absent
+						if nodeCountAttr != nil {
+							t.Errorf("Expected 'node_count' to be ABSENT from node_pool '%s' in '%s', but it was FOUND. Modified HCL:\n%s",
+								npCheck.nodePoolName, tc.gkeResourceName, string(modifiedContentBytes))
+						}
+					}
+				}
+			}
+
+			// Special check for "MultipleGKEResources" to ensure the second GKE resource was handled correctly.
+			if tc.name == "MultipleGKEResources" {
+				var gkeTwoResource *hclwrite.Block
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) == 2 &&
+						b.Labels()[0] == "google_container_cluster" && b.Labels()[1] == "gke_two" {
+						gkeTwoResource = b
+						break
+					}
+				}
+				if gkeTwoResource == nil {
+					t.Fatalf("Expected 'google_container_cluster' resource 'gke_two' not found for multi-resource verification. Modified HCL:\n%s", string(modifiedContentBytes))
+				}
+				// Check its first node_pool ("gke-two-pool")
+				gkeTwoPool1, _ := findNodePoolInBlock(gkeTwoResource, "gke-two-pool", modifier)
+				if gkeTwoPool1 == nil {
+					t.Errorf("Node pool 'gke-two-pool' in 'gke_two' not found. Modified HCL:\n%s", string(modifiedContentBytes))
+				} else {
+					if gkeTwoPool1.Body().GetAttribute("initial_node_count") != nil {
+						t.Errorf("'initial_node_count' should have been removed from 'gke-two-pool', but was found. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+					if gkeTwoPool1.Body().GetAttribute("node_count") != nil {
+						t.Errorf("'node_count' should be absent from 'gke-two-pool', but was found. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+				}
+				// Check its second node_pool ("gke-two-pool-extra")
+				gkeTwoPool2, _ := findNodePoolInBlock(gkeTwoResource, "gke-two-pool-extra", modifier)
+				if gkeTwoPool2 == nil {
+					t.Errorf("Node pool 'gke-two-pool-extra' in 'gke_two' not found. Modified HCL:\n%s", string(modifiedContentBytes))
+				} else {
+					if gkeTwoPool2.Body().GetAttribute("initial_node_count") != nil {
+						t.Errorf("'initial_node_count' should be absent from 'gke-two-pool-extra', but was found. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+					if gkeTwoPool2.Body().GetAttribute("node_count") == nil {
+						t.Errorf("'node_count' should be present in 'gke-two-pool-extra', but was not found. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+				}
+			}
+
+			if tc.expectNoOtherResourceChanges && tc.name == "NonGKEResource" {
+				var nonGKEResource *hclwrite.Block
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == "google_compute_instance" && b.Labels()[1] == "not_gke" {
+						nonGKEResource = b
+						break
+					}
+				}
+				if nonGKEResource == nil {
+					t.Fatalf("Expected non-GKE resource 'google_compute_instance.not_gke' not found. Modified HCL:\n%s", string(modifiedContentBytes))
+				}
+				// Check its initial_node_count attribute is still there
+				if nonGKEResource.Body().GetAttribute("initial_node_count") == nil {
+					t.Errorf("Top-level 'initial_node_count' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
+				}
+				// Check its node_pool block and its attributes
+				npBlock, _ := findNodePoolInBlock(nonGKEResource, "", modifier) // Assuming only one node_pool or name doesn't matter here for this non-gke resource
+				if npBlock == nil {
+					t.Errorf("'node_pool' block was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
+				} else {
+					if npBlock.Body().GetAttribute("initial_node_count") == nil {
+						t.Errorf("'initial_node_count' in 'node_pool' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+					if npBlock.Body().GetAttribute("node_count") == nil {
+						t.Errorf("'node_count' in 'node_pool' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+				}
+			}
+		})
+	}
+}
+
+// Helper struct for node pool checks
+type nodePoolCheck struct {
+	nodePoolName                  string // Name of the node_pool (if identifiable by name)
+	expectInitialNodeCountRemoved bool
+	expectNodeCountPresent        bool
+	expectedNodeCountValue        *int // If expectNodeCountPresent is true, optionally check its value
+}
+
+// Helper to find a block in a parsed file (useful for checking original state)
+func findBlockInParsedFile(file *hclwrite.File, blockType string, resourceName string) (*hclwrite.Block, error) {
+	if file == nil || file.Body() == nil {
+		return nil, fmt.Errorf("file or file body is nil")
+	}
+	for _, b := range file.Body().Blocks() {
+		if b.Type() == "resource" && len(b.Labels()) == 2 &&
+			b.Labels()[0] == blockType && b.Labels()[1] == resourceName {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("block %s %s not found", blockType, resourceName)
+}
+
+// Helper to find a node_pool block within a given resource block
+// Needs modifier for GetAttributeValue if identifying by name.
+func findNodePoolInBlock(resourceBlock *hclwrite.Block, nodePoolName string, mod *Modifier) (*hclwrite.Block, error) {
+	if resourceBlock == nil || resourceBlock.Body() == nil {
+		return nil, fmt.Errorf("resource block or body is nil")
+	}
+	for _, nb := range resourceBlock.Body().Blocks() {
+		if nb.Type() == "node_pool" {
+			if nodePoolName == "" { // If no name specified, return the first one found
+				return nb, nil
+			}
+			nameAttr := nb.Body().GetAttribute("name")
+			if nameAttr != nil && mod != nil {
+				val, err := mod.GetAttributeValue(nameAttr) // Use the modifier's GetAttributeValue
+				if err == nil && val.Type() == cty.String && val.AsString() == nodePoolName {
+					return nb, nil
+				}
+			}
+		}
+	}
+	if nodePoolName == "" {
+		return nil, fmt.Errorf("no node_pool block found")
+	}
+	return nil, fmt.Errorf("node_pool with name '%s' not found", nodePoolName)
+}
+
+// Helper function to get a pointer to an int value
+func intPtr(i int) *int {
+	return &i
+}
+
+func TestApplyMasterCIDRRule(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewNop() // Use NewNop for cleaner test output
+
+	type privateClusterConfigCheck struct {
+		expectBlockExists                   bool
+		expectPrivateEndpointSubnetworkRemoved bool
+		expectOtherAttributeUnchanged       *string // e.g., "enable_private_endpoint"
+	}
+
+	tests := []struct {
+		name                        string
+		hclContent                  string
+		expectedModifications       int
+		gkeResourceName             string // Name of the GKE resource to check
+		expectMasterCIDRPresent     bool   // Whether master_ipv4_cidr_block should be present at the end
+		privateClusterConfigCheck   *privateClusterConfigCheck
+		expectNoOtherResourceChanges bool // If true, implies other resources should be untouched
+		expectNoGKEResource         bool // If true, GKE resource itself is not expected
+	}{
+		{
+			name: "BothPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name                     = "test-cluster"
+  master_ipv4_cidr_block   = "172.16.0.0/28"
+  private_cluster_config {
+    enable_private_endpoint   = true
+    private_endpoint_subnetwork = "projects/my-project/regions/us-central1/subnetworks/my-subnetwork"
+  }
+}`,
+			expectedModifications:   1,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: true,
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+		},
+		{
+			name: "OnlyMasterCIDRPresent_PrivateConfigMissing",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name                   = "test-cluster"
+  master_ipv4_cidr_block = "172.16.0.0/28"
+  # private_cluster_config is missing
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists: false, // Block itself is missing
+			},
+		},
+		{
+			name: "OnlyMasterCIDRPresent_SubnetworkMissingInPrivateConfig",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name                   = "test-cluster"
+  master_ipv4_cidr_block = "172.16.0.0/28"
+  private_cluster_config {
+    enable_private_endpoint = true
+    # private_endpoint_subnetwork is missing
+  }
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: false, // Was never there
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+		},
+		{
+			name: "OnlyPrivateEndpointSubnetworkPresent_MasterCIDRMissing",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  # master_ipv4_cidr_block is missing
+  private_cluster_config {
+    enable_private_endpoint   = true
+    private_endpoint_subnetwork = "projects/my-project/regions/us-central1/subnetworks/my-subnetwork"
+  }
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: false, // Was never there
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: false, // Master CIDR not present, so no removal
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+		},
+		{
+			name: "PrivateConfigExistsNoSubnetwork_MasterCIDRPresent", // Same as OnlyMasterCIDRPresent_SubnetworkMissingInPrivateConfig
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name                   = "test-cluster"
+  master_ipv4_cidr_block = "172.16.0.0/28"
+  private_cluster_config {
+    enable_private_endpoint = true
+  }
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: false, // Was never there
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+		},
+		{
+			name: "PrivateConfigMissing_MasterCIDRPresent", // Same as OnlyMasterCIDRPresent_PrivateConfigMissing
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name                   = "test-cluster"
+  master_ipv4_cidr_block = "172.16.0.0/28"
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists: false,
+			},
+		},
+		{
+			name: "NeitherPresent",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  # master_ipv4_cidr_block is missing
+  private_cluster_config {
+    enable_private_endpoint = true
+    # private_endpoint_subnetwork is missing
+  }
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: false,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: false,
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+		},
+		{
+			name: "NeitherPresent_NoPrivateConfigBlock",
+			hclContent: `
+resource "google_container_cluster" "gke_cluster" {
+  name = "test-cluster"
+  # master_ipv4_cidr_block is missing
+  # private_cluster_config is missing
+}`,
+			expectedModifications:   0,
+			gkeResourceName:         "gke_cluster",
+			expectMasterCIDRPresent: false,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists: false,
+			},
+		},
+		{
+			name: "NonGKEResource",
+			hclContent: `
+resource "google_compute_instance" "not_gke" {
+  name                   = "test-vm"
+  master_ipv4_cidr_block = "172.16.0.0/28" # Attribute name clash
+  private_cluster_config {                 # Block name clash
+    private_endpoint_subnetwork = "projects/my-project/regions/us-central1/subnetworks/my-subnetwork"
+    enable_private_endpoint   = true
+  }
+}`,
+			expectedModifications:      0,
+			gkeResourceName:            "", // No GKE resource to check specifically
+			expectNoOtherResourceChanges: true,
+		},
+		{
+			name:                  "EmptyHCL",
+			hclContent:            ``,
+			expectedModifications: 0,
+			gkeResourceName:       "",
+			expectNoGKEResource:   true,
+		},
+		{
+			name: "MultipleGKEResources_OneMatch",
+			hclContent: `
+resource "google_container_cluster" "gke_one_match" {
+  name                     = "cluster-one"
+  master_ipv4_cidr_block   = "172.16.0.0/28"
+  private_cluster_config {
+    private_endpoint_subnetwork = "projects/my-project/regions/us-central1/subnetworks/sub-one"
+    enable_private_endpoint   = true
+  }
+}
+resource "google_container_cluster" "gke_two_no_master_cidr" {
+  name = "cluster-two"
+  # master_ipv4_cidr_block is missing
+  private_cluster_config {
+    private_endpoint_subnetwork = "projects/my-project/regions/us-central1/subnetworks/sub-two"
+  }
+}
+resource "google_container_cluster" "gke_three_no_subnetwork" {
+  name                     = "cluster-three"
+  master_ipv4_cidr_block   = "172.16.1.0/28"
+  private_cluster_config {
+    # private_endpoint_subnetwork is missing
+    enable_private_endpoint = false
+  }
+}`,
+			expectedModifications:   1,
+			gkeResourceName:         "gke_one_match", // Check this one specifically for removal
+			expectMasterCIDRPresent: true,
+			privateClusterConfigCheck: &privateClusterConfigCheck{
+				expectBlockExists:                   true,
+				expectPrivateEndpointSubnetworkRemoved: true,
+				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+			},
+			// We also expect gke_two_no_master_cidr and gke_three_no_subnetwork to be untouched by the rule's removal logic.
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_master_cidr_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				if tc.hclContent == "" && tc.expectedModifications == 0 {
+					if modifier == nil {
+						return // NewFromFile failed as expected for empty content.
+					}
+				} else {
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				}
+			}
+
+			modifications, ruleErr := modifier.ApplyMasterCIDRRule()
+			if ruleErr != nil {
+				t.Fatalf("ApplyMasterCIDRRule() error = %v", ruleErr)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyMasterCIDRRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
+			if tc.expectNoGKEResource {
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) > 0 && b.Labels()[0] == "google_container_cluster" {
+						t.Errorf("Expected no 'google_container_cluster' resource, but found one: %v. HCL:\n%s", b.Labels(), string(modifiedContentBytes))
+					}
+				}
+				return
+			}
+
+			var targetGKEResource *hclwrite.Block
+			if tc.gkeResourceName != "" {
+				targetGKEResource, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", tc.gkeResourceName)
+				if targetGKEResource == nil && (tc.expectedModifications > 0 || tc.privateClusterConfigCheck != nil) {
+					t.Fatalf("Expected 'google_container_cluster' resource '%s' not found for verification. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+				}
+			}
+
+			if targetGKEResource != nil {
+				// Check master_ipv4_cidr_block presence
+				masterCIDRAttr := targetGKEResource.Body().GetAttribute("master_ipv4_cidr_block")
+				if tc.expectMasterCIDRPresent {
+					if masterCIDRAttr == nil {
+						t.Errorf("Expected 'master_ipv4_cidr_block' to be PRESENT in GKE resource '%s', but it was NOT FOUND. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+					}
+				} else {
+					if masterCIDRAttr != nil {
+						t.Errorf("Expected 'master_ipv4_cidr_block' to be ABSENT from GKE resource '%s', but it was FOUND. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+					}
+				}
+
+				// Check private_cluster_config
+				if tc.privateClusterConfigCheck != nil {
+					pccBlock := targetGKEResource.Body().FirstMatchingBlock("private_cluster_config", nil)
+					if !tc.privateClusterConfigCheck.expectBlockExists {
+						if pccBlock != nil {
+							t.Errorf("Expected 'private_cluster_config' block NOT to exist in GKE resource '%s', but it was FOUND. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+						}
+					} else { // Expect block to exist
+						if pccBlock == nil {
+							t.Fatalf("Expected 'private_cluster_config' block to EXIST in GKE resource '%s', but it was NOT FOUND. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+						}
+
+						subnetworkAttr := pccBlock.Body().GetAttribute("private_endpoint_subnetwork")
+						if tc.privateClusterConfigCheck.expectPrivateEndpointSubnetworkRemoved {
+							if subnetworkAttr != nil {
+								t.Errorf("Expected 'private_endpoint_subnetwork' to be REMOVED from 'private_cluster_config' in '%s', but it was FOUND. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+							}
+						} else { // Expect subnetwork to be present or absent based on original (if not removed)
+							originalGKEResource, _ := findBlockInParsedFile(hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos), "google_container_cluster", tc.gkeResourceName)
+							var originalSubnetworkPresent bool
+							if originalGKEResource != nil {
+								originalPCC := originalGKEResource.Body().FirstMatchingBlock("private_cluster_config", nil)
+								if originalPCC != nil && originalPCC.Body().GetAttribute("private_endpoint_subnetwork") != nil {
+									originalSubnetworkPresent = true
+								}
+							}
+
+							if originalSubnetworkPresent && subnetworkAttr == nil {
+								t.Errorf("Expected 'private_endpoint_subnetwork' to be PRESENT in 'private_cluster_config' in '%s', but it was NOT FOUND (removed). Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+							}
+							if !originalSubnetworkPresent && subnetworkAttr != nil {
+								// This case should ideally not happen if the rule only removes.
+								t.Errorf("'private_endpoint_subnetwork' was unexpectedly ADDED to 'private_cluster_config' in '%s'. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+							}
+						}
+
+						if tc.privateClusterConfigCheck.expectOtherAttributeUnchanged != nil {
+							otherAttrName := *tc.privateClusterConfigCheck.expectOtherAttributeUnchanged
+							otherAttr := pccBlock.Body().GetAttribute(otherAttrName)
+							// Check if this other attribute was present in the original HCL
+							originalGKEResource, _ := findBlockInParsedFile(hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos), "google_container_cluster", tc.gkeResourceName)
+							var originalOtherAttrPresent bool
+							if originalGKEResource != nil {
+								originalPCC := originalGKEResource.Body().FirstMatchingBlock("private_cluster_config", nil)
+								if originalPCC != nil && originalPCC.Body().GetAttribute(otherAttrName) != nil {
+									originalOtherAttrPresent = true
+								}
+							}
+
+							if originalOtherAttrPresent && otherAttr == nil {
+								t.Errorf("Expected attribute '%s' in 'private_cluster_config' of '%s' to be UNCHANGED, but it was REMOVED. Modified HCL:\n%s", otherAttrName, tc.gkeResourceName, string(modifiedContentBytes))
+							}
+							if !originalOtherAttrPresent && otherAttr != nil {
+								t.Errorf("Attribute '%s' in 'private_cluster_config' of '%s' was unexpectedly ADDED. Modified HCL:\n%s", otherAttrName, tc.gkeResourceName, string(modifiedContentBytes))
+							}
+						}
+					}
+				}
+			}
+
+			// Specific checks for MultipleGKEResources case
+			if tc.name == "MultipleGKEResources_OneMatch" {
+				// Check gke_two_no_master_cidr (should be untouched by removal)
+				gkeTwo, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two_no_master_cidr")
+				if gkeTwo == nil {t.Fatalf("GKE resource 'gke_two_no_master_cidr' not found in multi-resource test.")}
+				if gkeTwo.Body().GetAttribute("master_ipv4_cidr_block") != nil {
+					t.Errorf("'master_ipv4_cidr_block' unexpectedly present in 'gke_two_no_master_cidr'.")
+				}
+				pccTwo := gkeTwo.Body().FirstMatchingBlock("private_cluster_config", nil)
+				if pccTwo == nil {t.Fatalf("'private_cluster_config' missing in 'gke_two_no_master_cidr'.")}
+				if pccTwo.Body().GetAttribute("private_endpoint_subnetwork") == nil {
+					t.Errorf("'private_endpoint_subnetwork' unexpectedly missing from 'gke_two_no_master_cidr'.")
+				}
+
+				// Check gke_three_no_subnetwork (should be untouched by removal)
+				gkeThree, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_three_no_subnetwork")
+				if gkeThree == nil {t.Fatalf("GKE resource 'gke_three_no_subnetwork' not found in multi-resource test.")}
+				if gkeThree.Body().GetAttribute("master_ipv4_cidr_block") == nil {
+					t.Errorf("'master_ipv4_cidr_block' unexpectedly missing from 'gke_three_no_subnetwork'.")
+				}
+				pccThree := gkeThree.Body().FirstMatchingBlock("private_cluster_config", nil)
+				if pccThree == nil {t.Fatalf("'private_cluster_config' missing in 'gke_three_no_subnetwork'.")}
+				if pccThree.Body().GetAttribute("private_endpoint_subnetwork") != nil {
+					t.Errorf("'private_endpoint_subnetwork' unexpectedly present in 'gke_three_no_subnetwork'.")
+				}
+				if pccThree.Body().GetAttribute("enable_private_endpoint") == nil { // Check the other attr is still there
+					t.Errorf("'enable_private_endpoint' unexpectedly removed from 'gke_three_no_subnetwork'.")
+				}
+			}
+
+			if tc.expectNoOtherResourceChanges && tc.name == "NonGKEResource" {
+				nonGke, _ := findBlockInParsedFile(verifiedFile, "google_compute_instance", "not_gke")
+				if nonGke == nil {
+					t.Fatalf("Non-GKE resource 'google_compute_instance.not_gke' not found. Modified HCL:\n%s", string(modifiedContentBytes))
+				}
+				if nonGke.Body().GetAttribute("master_ipv4_cidr_block") == nil {
+					t.Errorf("'master_ipv4_cidr_block' was unexpectedly removed from non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
+				}
+				pccNonGke := nonGke.Body().FirstMatchingBlock("private_cluster_config", nil)
+				if pccNonGke == nil {
+					t.Errorf("'private_cluster_config' block was unexpectedly removed from non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
+				} else {
+					if pccNonGke.Body().GetAttribute("private_endpoint_subnetwork") == nil {
+						t.Errorf("'private_endpoint_subnetwork' was unexpectedly removed from 'private_cluster_config' of non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
+					}
+				}
+			}
+		})
+	}
+}
+
+
+
 func TestApplyRule3(t *testing.T) {
 	t.Helper()
 	logger, _ := zap.NewDevelopment() // Or use zap.NewNop() for less verbose test output
