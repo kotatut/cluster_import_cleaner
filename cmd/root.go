@@ -43,58 +43,33 @@ var rootCmd = &cobra.Command{
 		// The logger from cmd/root.go is passed to the package function.
 		hclFile, err := hclmodifier.NewFromFile(filePathVariable, logger)
 		if err != nil {
-			// ParseHCLFile already logs the detailed error.
-			// We return the error to Cobra, which will typically print it to stderr.
+			// NewFromFile already logs the detailed error.
 			return fmt.Errorf("failed to parse HCL file: %w", err)
 		}
 
-		// 2. Apply Rule 1
-		logger.Info("Applying Rule 1...")
-		rule1Modifications, err := hclFile.ApplyRule1()
-		if err != nil {
-			// ApplyRule1 already logs the detailed error.
-			logger.Error("Error applying Rule 1", zap.Error(err), zap.String("filePath", filePathVariable))
-			// Decide if we should return error or continue with other rules
-			// For now, let's log the error and continue
-		} else {
-			logger.Info("Rule 1 application completed", zap.Int("modifications", rule1Modifications), zap.String("filePath", filePathVariable))
+		// 2. Define all rules to be applied by the generic ApplyRules engine.
+		allRules := []hclmodifier.Rule{
+			hclmodifier.Rule1Definition,
+			hclmodifier.MasterCIDRRuleDefinition,
+			hclmodifier.Rule2Definition,
+			hclmodifier.Rule3Definition,
+			hclmodifier.RuleRemoveLoggingService,
+			hclmodifier.RuleRemoveMonitoringService,
+			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
+			// due to their complex logic not yet fully translated to the generic rule engine.
 		}
 
-		// 3. Apply Rule 2
-		logger.Info("Applying Rule 2...")
-		rule2Modifications, err := hclFile.ApplyRule2()
-		if err != nil {
-			// ApplyRule2 already logs the detailed error.
-			logger.Error("Error applying Rule 2", zap.Error(err), zap.String("filePath", filePathVariable))
-			// For now, let's log the error and continue
-		} else {
-			logger.Info("Rule 2 application completed", zap.Int("modifications", rule2Modifications), zap.String("filePath", filePathVariable))
+		logger.Info("Applying generic rules...", zap.Int("ruleCount", len(allRules)))
+		modifications, errors := hclFile.ApplyRules(allRules)
+		if len(errors) > 0 {
+			logger.Error("Errors applying generic rules", zap.Errors("errors", errors), zap.String("filePath", filePathVariable))
+			// Decide if we should return error or continue. For now, log and continue.
 		}
+		logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathVariable))
 
-		// Apply Rule 3
-		logger.Info("Applying Rule 3...")
-		rule3Modifications, err := hclFile.ApplyRule3()
-		if err != nil {
-			// ApplyRule3 already logs the detailed error.
-			logger.Error("Error applying Rule 3", zap.Error(err), zap.String("filePath", filePathVariable))
-			// For now, let's log the error and continue
-		} else {
-			logger.Info("Rule 3 application completed", zap.Int("modifications", rule3Modifications), zap.String("filePath", filePathVariable))
-		}
-
-		// Apply Autopilot Rule
-		logger.Info("Applying Autopilot Rule...")
-		autopilotModifications, err := hclFile.ApplyAutopilotRule()
-		if err != nil {
-			// ApplyAutopilotRule already logs the detailed error.
-			logger.Error("Error applying Autopilot rule", zap.Error(err), zap.String("filePath", filePathVariable))
-			// Log the error and continue
-		} else {
-			logger.Info("ApplyAutopilotRule completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathVariable))
-		}
-
-		// Apply InitialNodeCount Rule
-		logger.Info("Applying InitialNodeCount Rule...")
+		// 3. Apply rules that have complex logic not yet fitting the generic engine.
+		// Apply InitialNodeCount Rule (Complex: Iterates over sub-blocks 'node_pool')
+		logger.Info("Applying InitialNodeCount Rule (custom logic)...")
 		initialNodeCountModifications, err := hclFile.ApplyInitialNodeCountRule()
 		if err != nil {
 			logger.Error("Error applying InitialNodeCount Rule", zap.Error(err), zap.String("filePath", filePathVariable))
@@ -102,16 +77,16 @@ var rootCmd = &cobra.Command{
 			logger.Info("InitialNodeCount Rule application completed", zap.Int("modifications", initialNodeCountModifications), zap.String("filePath", filePathVariable))
 		}
 
-		// Apply MasterCIDR Rule
-		logger.Info("Applying MasterCIDR Rule...")
-		masterCIDRModifications, err := hclFile.ApplyMasterCIDRRule()
+		// Apply Autopilot Rule (Complex: Conditional logic based on attribute values, multiple different removals)
+		logger.Info("Applying Autopilot Rule (custom logic)...")
+		autopilotModifications, err := hclFile.ApplyAutopilotRule()
 		if err != nil {
-			logger.Error("Error applying MasterCIDR Rule", zap.Error(err), zap.String("filePath", filePathVariable))
+			logger.Error("Error applying Autopilot rule", zap.Error(err), zap.String("filePath", filePathVariable))
 		} else {
-			logger.Info("MasterCIDR Rule application completed", zap.Int("modifications", masterCIDRModifications), zap.String("filePath", filePathVariable))
+			logger.Info("AutopilotRule application completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathVariable))
 		}
 
-		// 4. Write the modified HCL content back to the file using the hclmodifier package.
+		// 4. Write the modified HCL content back to the file.
 		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
 			// WriteHCLFile already logs the detailed error.
