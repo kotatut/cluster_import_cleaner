@@ -48,16 +48,30 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse HCL file: %w", err)
 		}
 
-		// 2. Modify the "name" attributes using the hclmodifier package.
-		modifiedCount, err := hclFile.ModifyNameAttributes()
+		// 2. Apply Rule 1
+		logger.Info("Applying Rule 1...")
+		rule1Modifications, err := hclFile.ApplyRule1()
 		if err != nil {
-			// ModifyNameAttributes already logs the detailed error.
-			return fmt.Errorf("failed to modify HCL attributes: %w", err)
+			// ApplyRule1 already logs the detailed error.
+			logger.Error("Error applying Rule 1", zap.Error(err), zap.String("filePath", filePathVariable))
+			// Decide if we should return error or continue with other rules
+			// For now, let's log the error and continue
+		} else {
+			logger.Info("Rule 1 application completed", zap.Int("modifications", rule1Modifications), zap.String("filePath", filePathVariable))
 		}
-		logger.Info("Attribute modification complete", zap.Int("modifiedCount", modifiedCount), zap.String("filePath", filePathVariable))
 
+		// 3. Apply Rule 2
+		logger.Info("Applying Rule 2...")
+		rule2Modifications, err := hclFile.ApplyRule2()
+		if err != nil {
+			// ApplyRule2 already logs the detailed error.
+			logger.Error("Error applying Rule 2", zap.Error(err), zap.String("filePath", filePathVariable))
+			// For now, let's log the error and continue
+		} else {
+			logger.Info("Rule 2 application completed", zap.Int("modifications", rule2Modifications), zap.String("filePath", filePathVariable))
+		}
 
-		// 3. Write the modified HCL content back to the file using the hclmodifier package.
+		// 4. Write the modified HCL content back to the file using the hclmodifier package.
 		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
 			// WriteHCLFile already logs the detailed error.

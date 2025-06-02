@@ -162,6 +162,584 @@ resource "aws_instance" "example" {
 	}
 }
 
+func TestApplyRule2(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment() // Or use zap.NewNop() for less verbose test output
+
+	tests := []struct {
+		name                                  string
+		hclContent                            string
+		expectedModifications                 int
+		expectServicesIPV4CIDRBlockRemoved    bool
+		resourceLabelsToVerify                []string // e.g., ["google_container_cluster", "primary"]
+		ipAllocationPolicyShouldExistForCheck bool     // True if we need to check inside ip_allocation_policy
+	}{
+		{
+			name: "Both attributes present in ip_allocation_policy",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block   = "10.2.0.0/20"
+    cluster_secondary_range_name = "services_range"
+  }
+}`,
+			expectedModifications:                 1,
+			expectServicesIPV4CIDRBlockRemoved:    true,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "Only services_ipv4_cidr_block present in ip_allocation_policy",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block   = "10.2.0.0/20"
+    // cluster_secondary_range_name is missing
+  }
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "Only cluster_secondary_range_name present in ip_allocation_policy",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {
+    // services_ipv4_cidr_block is missing
+    cluster_secondary_range_name = "services_range"
+  }
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false, // It was never there
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "Neither attribute relevant to Rule 2 present in ip_allocation_policy",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {
+    some_other_attribute = "value"
+  }
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false, // It was never there
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "ip_allocation_policy block is present but empty",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {}
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false, // It was never there
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "ip_allocation_policy block is missing entirely",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  // No ip_allocation_policy block
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false, // Block doesn't exist
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: false,
+		},
+		{
+			name: "Non-matching resource type with similar nested structure",
+			hclContent: `
+resource "google_compute_router" "default" {
+  name = "my-router"
+  ip_allocation_policy { // Not the target resource, but has the block name
+    services_ipv4_cidr_block   = "10.2.0.0/20"
+    cluster_secondary_range_name = "services_range"
+  }
+}`,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false, // Should not be touched
+			resourceLabelsToVerify:                []string{"google_compute_router", "default"},
+			ipAllocationPolicyShouldExistForCheck: true, // The block exists on this other resource
+		},
+		{
+			name: "Multiple google_container_cluster blocks, one matching for Rule 2",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block   = "10.2.0.0/20"
+    cluster_secondary_range_name = "services_range" // Match here
+  }
+}
+resource "google_container_cluster" "secondary" {
+  name = "secondary-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block = "10.3.0.0/20" // Only this attribute, no secondary_range_name
+  }
+}`,
+			expectedModifications:                 1,
+			expectServicesIPV4CIDRBlockRemoved:    true, // For "primary"
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			ipAllocationPolicyShouldExistForCheck: true,
+			// We will also need to check "secondary" was not modified.
+		},
+		{
+			name: "Multiple google_container_cluster blocks, ip_policy missing in one",
+			hclContent: `
+resource "google_container_cluster" "alpha" {
+  name = "alpha-cluster"
+  // No ip_allocation_policy block
+}
+resource "google_container_cluster" "beta" {
+  name = "beta-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block   = "10.4.0.0/20"
+    cluster_secondary_range_name = "services_range_beta" // Match here
+  }
+}`,
+			expectedModifications:                 1,
+			expectServicesIPV4CIDRBlockRemoved:    true, // For "beta"
+			resourceLabelsToVerify:                []string{"google_container_cluster", "beta"},
+			ipAllocationPolicyShouldExistForCheck: true,
+		},
+		{
+			name: "Empty HCL content",
+			hclContent: ``,
+			expectedModifications:                 0,
+			expectServicesIPV4CIDRBlockRemoved:    false,
+			resourceLabelsToVerify:                nil,
+			ipAllocationPolicyShouldExistForCheck: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_rule2_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				if tc.hclContent == "" && tc.expectedModifications == 0 {
+					if modifier == nil {
+						modifications, ruleErr := 0, error(nil)
+						if modifications != tc.expectedModifications {
+							t.Errorf("ApplyRule2() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+						}
+						if ruleErr != nil {
+							t.Errorf("ApplyRule2() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+						}
+						return
+					}
+				} else {
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				}
+			}
+
+			modifications, ruleErr := modifier.ApplyRule2()
+			if ruleErr != nil {
+				t.Fatalf("ApplyRule2() error = %v", ruleErr)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRule2() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				blockName := tc.resourceLabelsToVerify[1]
+				var targetResourceBlock *hclwrite.Block
+
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+						targetResourceBlock = b
+						break
+					}
+				}
+
+				if targetResourceBlock == nil && (tc.expectedModifications > 0 || tc.expectServicesIPV4CIDRBlockRemoved) {
+					t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+				}
+
+				if targetResourceBlock != nil {
+					var ipAllocationPolicyBlock *hclwrite.Block
+					for _, nestedBlock := range targetResourceBlock.Body().Blocks() {
+						if nestedBlock.Type() == "ip_allocation_policy" {
+							ipAllocationPolicyBlock = nestedBlock
+							break
+						}
+					}
+
+					if !tc.ipAllocationPolicyShouldExistForCheck {
+						if ipAllocationPolicyBlock != nil {
+							t.Errorf("Expected 'ip_allocation_policy' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, tc.hclContent)
+						}
+					} else { // ipAllocationPolicyShouldExistForCheck is true
+						if ipAllocationPolicyBlock == nil {
+							// If we expected a change within ip_allocation_policy, it must exist.
+							if tc.expectServicesIPV4CIDRBlockRemoved || tc.expectedModifications > 0 {
+								t.Fatalf("Expected 'ip_allocation_policy' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, tc.hclContent)
+							}
+							// If no change expected and block is missing, that's fine.
+						} else {
+							hasServicesCIDRBlock := ipAllocationPolicyBlock.Body().GetAttribute("services_ipv4_cidr_block") != nil
+							if tc.expectServicesIPV4CIDRBlockRemoved {
+								if hasServicesCIDRBlock {
+									t.Errorf("Expected 'services_ipv4_cidr_block' to be REMOVED from ip_allocation_policy in %s[\"%s\"], but it was FOUND. HCL:\n%s\nModified HCL:\n%s",
+										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+								}
+							} else { // Not expecting removal
+								// Check if it was removed when it shouldn't have been (only if it was there initially)
+								originalFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+								var originalIpAllocBlock *hclwrite.Block
+								var originalResourceBlock *hclwrite.Block
+								for _, b := range originalFile.Body().Blocks() {
+									if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+										originalResourceBlock = b
+										break
+									}
+								}
+								if originalResourceBlock != nil {
+									for _, nb := range originalResourceBlock.Body().Blocks() {
+										if nb.Type() == "ip_allocation_policy" {
+											originalIpAllocBlock = nb
+											break
+										}
+									}
+								}
+
+								if originalIpAllocBlock != nil && originalIpAllocBlock.Body().GetAttribute("services_ipv4_cidr_block") != nil {
+									// It was there originally and should not have been removed
+									if !hasServicesCIDRBlock {
+										t.Errorf("Expected 'services_ipv4_cidr_block' to be PRESENT in ip_allocation_policy in %s[\"%s\"], but it was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
+											blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+									}
+								}
+								// If it wasn't there originally, and not expected to be removed, then it should still not be there. This is covered.
+							}
+						}
+					}
+				}
+			}
+
+			// Specific check for "Multiple google_container_cluster blocks, one matching for Rule 2"
+			if tc.name == "Multiple google_container_cluster blocks, one matching for Rule 2" {
+				var secondaryBlock *hclwrite.Block
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "secondary" {
+						secondaryBlock = b
+						break
+					}
+				}
+				if secondaryBlock == nil {
+					t.Fatalf("Could not find 'secondary' GKE block for multi-block test verification. HCL:\n%s", tc.hclContent)
+				}
+				ipAllocSecondary := secondaryBlock.Body().FirstMatchingBlock("ip_allocation_policy", nil)
+				if ipAllocSecondary == nil {
+					t.Fatalf("'ip_allocation_policy' missing in 'secondary' GKE block for multi-block test. HCL:\n%s", tc.hclContent)
+				}
+				if ipAllocSecondary.Body().GetAttribute("services_ipv4_cidr_block") == nil {
+					t.Errorf("'services_ipv4_cidr_block' expected to be PRESENT in 'secondary' GKE's ip_allocation_policy, but was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
+						tc.hclContent, string(modifier.File().Bytes()))
+				}
+			}
+		})
+	}
+}
+
+func TestApplyRule1(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment() // Or use zap.NewNop() for less verbose test output
+
+	tests := []struct {
+		name                         string
+		hclContent                   string
+		expectedModifications        int
+		expectClusterIPV4CIDRRemoved bool
+		resourceLabelsToVerify       []string // e.g., ["google_container_cluster", "primary"]
+	}{
+		{
+			name: "Both attributes present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block = "10.1.0.0/14"
+  }
+}`,
+			expectedModifications:        1,
+			expectClusterIPV4CIDRRemoved: true,
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Only cluster_ipv4_cidr present (no ip_allocation_policy block)",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14"
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false,
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Only cluster_ipv4_cidr present (ip_allocation_policy block exists but no cluster_ipv4_cidr_block)",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14"
+  ip_allocation_policy {
+    // cluster_ipv4_cidr_block = "10.1.0.0/14" // This is missing
+    services_ipv4_cidr_block = "10.2.0.0/20"
+  }
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false,
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Only ip_allocation_policy.cluster_ipv4_cidr_block present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  // cluster_ipv4_cidr  = "10.0.0.0/14" // This is missing
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block = "10.1.0.0/14"
+  }
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false, // It was never there
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Neither attribute relevant to Rule 1 present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  ip_allocation_policy {
+    services_ipv4_cidr_block = "10.2.0.0/20"
+  }
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false, // It was never there
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "ip_allocation_policy block is missing entirely, cluster_ipv4_cidr present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14"
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false,
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Non-matching resource type (google_compute_instance)",
+			hclContent: `
+resource "google_compute_instance" "default" {
+  name               = "test-instance"
+  cluster_ipv4_cidr  = "10.0.0.0/14" // Attribute name clash
+  ip_allocation_policy {             // Block name clash
+    cluster_ipv4_cidr_block = "10.1.0.0/14"
+  }
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false, // On the wrong resource type
+			resourceLabelsToVerify:       []string{"google_compute_instance", "default"},
+		},
+		{
+			name: "Multiple google_container_cluster blocks, one matching",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block = "10.1.0.0/14" // Match here
+  }
+}
+resource "google_container_cluster" "secondary" {
+  name               = "secondary-cluster"
+  cluster_ipv4_cidr  = "10.2.0.0/14" // No ip_allocation_policy.cluster_ipv4_cidr_block
+  ip_allocation_policy {
+    services_ipv4_cidr_block = "10.3.0.0/20"
+  }
+}`,
+			expectedModifications:        1,
+			expectClusterIPV4CIDRRemoved: true, // For "primary"
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+			// We will also need to check "secondary" was not modified.
+		},
+		{
+			name: "Multiple google_container_cluster blocks, none matching",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name               = "primary-cluster"
+  cluster_ipv4_cidr  = "10.0.0.0/14" // No ip_allocation_policy.cluster_ipv4_cidr_block
+}
+resource "google_container_cluster" "secondary" {
+  name               = "secondary-cluster"
+  // No cluster_ipv4_cidr
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block = "10.1.0.0/14"
+  }
+}`,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false,
+			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
+		},
+		{
+			name: "Empty HCL content",
+			hclContent: ``,
+			expectedModifications:        0,
+			expectClusterIPV4CIDRRemoved: false,
+			resourceLabelsToVerify:       nil, // No specific resource to verify
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			// No need to defer os.Remove(tmpFile.Name()), t.TempDir() handles cleanup.
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close() // Close beforeFatalf
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				// For empty HCL, NewFromFile might return an error or a valid modifier with an empty body.
+				// If it's an error and the test expects 0 modifications, that might be okay.
+				if tc.hclContent == "" && tc.expectedModifications == 0 {
+					// Allow this specific case (e.g., if NewFromFile errors on empty file but rule handles nil body)
+					// Or, if NewFromFile creates a valid empty body, the rule should handle it.
+					if modifier == nil { // If NewFromFile truly failed
+						modifications, ruleErr := 0, error(nil) // Simulate ApplyRule1 not running
+						if modifications != tc.expectedModifications {
+							t.Errorf("ApplyRule1() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+						}
+						if ruleErr != nil {
+							t.Errorf("ApplyRule1() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+						}
+						return // Test is done for this case
+					}
+					// if modifier is not nil, proceed with ApplyRule1 call
+				} else {
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				}
+			}
+
+			modifications, ruleErr := modifier.ApplyRule1()
+			if ruleErr != nil {
+				t.Fatalf("ApplyRule1() error = %v", ruleErr)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRule1() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				blockName := tc.resourceLabelsToVerify[1]
+				var targetBlock *hclwrite.Block
+
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+						targetBlock = b
+						break
+					}
+				}
+
+				if targetBlock == nil && (tc.expectClusterIPV4CIDRRemoved || tc.expectedModifications > 0) {
+					// If we expected a change, the block should exist unless the test is about removing the block itself (not the case for Rule1)
+					t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+				}
+
+				if targetBlock != nil { // Only proceed if block exists
+					hasClusterIPV4CIDR := targetBlock.Body().GetAttribute("cluster_ipv4_cidr") != nil
+					if tc.expectClusterIPV4CIDRRemoved {
+						if hasClusterIPV4CIDR {
+							t.Errorf("Expected 'cluster_ipv4_cidr' to be removed from %s[\"%s\"], but it was found. HCL content:\n%s\nModified HCL:\n%s",
+								blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+						}
+					} else {
+						// If not expecting removal, it should be present if it was in the input,
+						// or absent if it wasn't. This is implicitly covered by modification count and specific scenario logic.
+						// For "Non-matching resource type", we ensure it wasn't removed from the wrong block.
+						if tc.name == "Non-matching resource type (google_compute_instance)" {
+							originalBlockHasIt := false
+							originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+							for _, b := range originalParsedFile.Body().Blocks() {
+								if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+									if b.Body().GetAttribute("cluster_ipv4_cidr") != nil {
+										originalBlockHasIt = true
+										break
+									}
+								}
+							}
+							if originalBlockHasIt && !hasClusterIPV4CIDR {
+								t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. HCL content:\n%s\nModified HCL:\n%s",
+									blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+							}
+						}
+					}
+				}
+			}
+
+			// Specific check for the "Multiple google_container_cluster blocks, one matching" case
+			if tc.name == "Multiple google_container_cluster blocks, one matching" {
+				var secondaryBlock *hclwrite.Block
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "secondary" {
+						secondaryBlock = b
+						break
+					}
+				}
+				if secondaryBlock == nil {
+					t.Fatalf("Could not find the 'secondary' google_container_cluster block for verification. HCL content:\n%s", tc.hclContent)
+				}
+				if secondaryBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
+					t.Errorf("Expected 'cluster_ipv4_cidr' to be present in 'secondary' block, but it was not. HCL content:\n%s\nModified HCL:\n%s",
+						tc.hclContent, string(modifier.File().Bytes()))
+				}
+			}
+		})
+	}
+}
+
 func TestRemoveBlock(t *testing.T) {
 	t.Helper()
 

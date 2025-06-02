@@ -302,3 +302,150 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 		zap.Any("optionalResourceName", optionalResourceName))
 	return removedCount, nil
 }
+
+// ApplyRule1 implements the logic for Rule 1:
+// 1. Iterate through all blocks.
+// 2. Identify `resource` blocks with type `google_container_cluster`.
+// 3. For each such block:
+//    a. Check for `cluster_ipv4_cidr` attribute.
+//    b. Check for `ip_allocation_policy` nested block.
+//    c. If `ip_allocation_policy` exists, check for `cluster_ipv4_cidr_block` attribute within it.
+//    d. If both `cluster_ipv4_cidr` (main block) and `ip_allocation_policy.cluster_ipv4_cidr_block` (nested) are found,
+//       remove `cluster_ipv4_cidr` from the main block.
+//    e. Increment a counter for each modification.
+// 4. Log information about the process.
+// 5. Return the total count of modifications and any error.
+func (m *Modifier) ApplyRule1() (modifications int, err error) {
+	m.logger.Info("Starting ApplyRule1")
+	modificationCount := 0
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyRule1 called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		// Rule 2: Identify `resource` blocks with type `google_container_cluster`.
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource", zap.String("name", resourceName))
+
+			// Rule 3a: Check for the existence of the `cluster_ipv4_cidr` attribute.
+			mainClusterCIDRAttribute := block.Body().GetAttribute("cluster_ipv4_cidr")
+
+			// Rule 3b: Check for the existence of an `ip_allocation_policy` nested block.
+			var ipAllocationPolicyBlock *hclwrite.Block
+			// Iterate over nested blocks of the current resource block
+			for _, nestedBlock := range block.Body().Blocks() {
+				if nestedBlock.Type() == "ip_allocation_policy" {
+					ipAllocationPolicyBlock = nestedBlock
+					m.logger.Debug("Found 'ip_allocation_policy' block", zap.String("resourceName", resourceName))
+					break
+				}
+			}
+
+			// Rule 3c: If ip_allocation_policy block exists, check for cluster_ipv4_cidr_block.
+			var nestedClusterCIDRAttribute *hclwrite.Attribute
+			if ipAllocationPolicyBlock != nil {
+				nestedClusterCIDRAttribute = ipAllocationPolicyBlock.Body().GetAttribute("cluster_ipv4_cidr_block")
+				if nestedClusterCIDRAttribute != nil {
+					m.logger.Debug("Found 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'", zap.String("resourceName", resourceName))
+				}
+			}
+
+			// Rule 3d: If both attributes are found, remove the one from the main block.
+			if mainClusterCIDRAttribute != nil && nestedClusterCIDRAttribute != nil {
+				m.logger.Info("Found 'cluster_ipv4_cidr' in main block and 'cluster_ipv4_cidr_block' in 'ip_allocation_policy'",
+					zap.String("resourceName", resourceName),
+					zap.String("attributeToRemove", "cluster_ipv4_cidr"))
+
+				block.Body().RemoveAttribute("cluster_ipv4_cidr")
+				modificationCount++ // Rule 3e: Increment counter
+				m.logger.Info("Removed 'cluster_ipv4_cidr' attribute", zap.String("resourceName", resourceName))
+			} else {
+				if mainClusterCIDRAttribute == nil {
+					m.logger.Debug("Attribute 'cluster_ipv4_cidr' not found in main block", zap.String("resourceName", resourceName))
+				}
+				if ipAllocationPolicyBlock == nil {
+					m.logger.Debug("'ip_allocation_policy' block not found", zap.String("resourceName", resourceName))
+				} else if nestedClusterCIDRAttribute == nil {
+					m.logger.Debug("Attribute 'cluster_ipv4_cidr_block' not found in 'ip_allocation_policy' block", zap.String("resourceName", resourceName))
+				}
+			}
+		}
+	}
+
+	m.logger.Info("ApplyRule1 finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}
+
+// ApplyRule2 implements the logic for Rule 2:
+// 1. Iterate through all blocks.
+// 2. Identify `resource` blocks with type `google_container_cluster`.
+// 3. For each such block:
+//    a. Find the `ip_allocation_policy` nested block.
+//    b. If `ip_allocation_policy` block exists:
+//        i. Check for `services_ipv4_cidr_block` attribute.
+//        ii. Check for `cluster_secondary_range_name` attribute.
+//        iii. If both attributes are found, remove `services_ipv4_cidr_block`.
+//        iv. Increment counter.
+// 4. Log information.
+// 5. Return total modifications and any error.
+func (m *Modifier) ApplyRule2() (modifications int, err error) {
+	m.logger.Info("Starting ApplyRule2")
+	modificationCount := 0
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyRule2 called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		// Rule 2: Identify `resource` blocks with type `google_container_cluster`.
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource for Rule 2", zap.String("name", resourceName))
+
+			// Rule 3a: Find the `ip_allocation_policy` nested block.
+			var ipAllocationPolicyBlock *hclwrite.Block
+			for _, nestedBlock := range block.Body().Blocks() {
+				if nestedBlock.Type() == "ip_allocation_policy" {
+					ipAllocationPolicyBlock = nestedBlock
+					m.logger.Debug("Found 'ip_allocation_policy' block for Rule 2", zap.String("resourceName", resourceName))
+					break
+				}
+			}
+
+			// Rule 3b: If `ip_allocation_policy` block exists.
+			if ipAllocationPolicyBlock != nil {
+				// Rule 3b.i: Check for `services_ipv4_cidr_block`.
+				servicesCIDRAttribute := ipAllocationPolicyBlock.Body().GetAttribute("services_ipv4_cidr_block")
+				// Rule 3b.ii: Check for `cluster_secondary_range_name`.
+				secondaryRangeAttribute := ipAllocationPolicyBlock.Body().GetAttribute("cluster_secondary_range_name")
+
+				// Rule 3b.iii: If both attributes are found, remove `services_ipv4_cidr_block`.
+				if servicesCIDRAttribute != nil && secondaryRangeAttribute != nil {
+					m.logger.Info("Found 'services_ipv4_cidr_block' and 'cluster_secondary_range_name' in 'ip_allocation_policy'",
+						zap.String("resourceName", resourceName),
+						zap.String("attributeToRemove", "services_ipv4_cidr_block"))
+
+					ipAllocationPolicyBlock.Body().RemoveAttribute("services_ipv4_cidr_block")
+					modificationCount++ // Rule 3b.iv: Increment counter
+					m.logger.Info("Removed 'services_ipv4_cidr_block' attribute from 'ip_allocation_policy'", zap.String("resourceName", resourceName))
+				} else {
+					if servicesCIDRAttribute == nil {
+						m.logger.Debug("Attribute 'services_ipv4_cidr_block' not found in 'ip_allocation_policy'", zap.String("resourceName", resourceName))
+					}
+					if secondaryRangeAttribute == nil {
+						m.logger.Debug("Attribute 'cluster_secondary_range_name' not found in 'ip_allocation_policy'", zap.String("resourceName", resourceName))
+					}
+				}
+			} else {
+				m.logger.Debug("'ip_allocation_policy' block not found for Rule 2", zap.String("resourceName", resourceName))
+			}
+		}
+	}
+
+	m.logger.Info("ApplyRule2 finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}
