@@ -356,13 +356,24 @@ resource "google_container_cluster" "gke_two" {
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
+			// Re-parse the modified HCL content for verification
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
 			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetResourceBlock *hclwrite.Block
 
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+				// Corrected logic to find the target resource block:
+				// b.Type() will be "resource" for resource blocks.
+				// blockType (from tc.resourceLabelsToVerify[0]) is the resource type label (e.g., "google_container_cluster").
+				// blockName (from tc.resourceLabelsToVerify[1]) is the resource name label (e.g., "primary").
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == blockType && b.Labels()[1] == blockName {
 						targetResourceBlock = b
 						break
 					}
@@ -371,13 +382,13 @@ resource "google_container_cluster" "gke_two" {
 				if targetResourceBlock == nil && (tc.expectedModifications > 0 || tc.expectEnabledAttributeRemoved || tc.binaryAuthorizationShouldExist) {
 					// If we expected some change or the block to exist, but the parent resource is gone, that's a problem.
 					if !(tc.hclContent == "" && tc.expectedModifications == 0) { // Allow for empty HCL case
-						t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+						t.Fatalf("Could not find the target resource block type '%s' with name '%s' for verification. Modified HCL:\n%s", blockType, blockName, string(modifiedContentBytes))
 					}
 				}
 
 				if targetResourceBlock != nil {
 					var binaryAuthBlock *hclwrite.Block
-					for _, nestedBlock := range targetResourceBlock.Body().Blocks() {
+					for _, nestedBlock := range targetResourceBlock.Body().Blocks() { // Iterate targetResourceBlock from verifiedFile
 						if nestedBlock.Type() == "binary_authorization" {
 							binaryAuthBlock = nestedBlock
 							break
@@ -451,26 +462,28 @@ resource "google_container_cluster" "gke_two" {
 			// Specific check for "Multiple GKE resources, one with conflict"
 			if tc.name == "Multiple GKE resources, one with conflict" {
 				var gkeTwoBlock *hclwrite.Block
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "gke_two" {
+				resourceTypeLabel := "google_container_cluster"
+				resourceNameLabel := "gke_two"
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == resourceTypeLabel && b.Labels()[1] == resourceNameLabel {
 						gkeTwoBlock = b
 						break
 					}
 				}
 				if gkeTwoBlock == nil {
-					t.Fatalf("Could not find 'gke_two' GKE block for multi-block test verification. HCL:\n%s", tc.hclContent)
+					t.Fatalf("Could not find '%s' GKE block named '%s' for multi-block test verification. Modified HCL:\n%s", resourceTypeLabel, resourceNameLabel, string(modifiedContentBytes))
 				}
 				binaryAuthGkeTwo := gkeTwoBlock.Body().FirstMatchingBlock("binary_authorization", nil)
 				if binaryAuthGkeTwo == nil {
-					t.Fatalf("'binary_authorization' missing in 'gke_two' GKE block for multi-block test. HCL:\n%s", tc.hclContent)
+					t.Fatalf("'binary_authorization' missing in 'gke_two' GKE block for multi-block test. Modified HCL:\n%s", string(modifiedContentBytes))
 				}
 				if binaryAuthGkeTwo.Body().GetAttribute("enabled") != nil {
-					t.Errorf("'enabled' attribute should NOT be present in 'gke_two' ('binary_authorization' block), but it was found. HCL:\n%s\nModified HCL:\n%s",
-						tc.hclContent, string(modifier.File().Bytes()))
+					t.Errorf("'enabled' attribute should NOT be present in 'gke_two' ('binary_authorization' block), but it was found. Modified HCL:\n%s",
+						string(modifiedContentBytes))
 				}
 				if binaryAuthGkeTwo.Body().GetAttribute("evaluation_mode") == nil {
-					t.Errorf("'evaluation_mode' attribute expected to be PRESENT in 'gke_two' ('binary_authorization' block), but was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
-						tc.hclContent, string(modifier.File().Bytes()))
+					t.Errorf("'evaluation_mode' attribute expected to be PRESENT in 'gke_two' ('binary_authorization' block), but was NOT FOUND. Modified HCL:\n%s",
+						string(modifiedContentBytes))
 				}
 			}
 		})
@@ -682,25 +695,33 @@ resource "google_container_cluster" "beta" {
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
+			// Re-parse the modified HCL content for verification
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
 			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetResourceBlock *hclwrite.Block
 
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+				// Corrected logic to find the target resource block
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == blockType && b.Labels()[1] == blockName {
 						targetResourceBlock = b
 						break
 					}
 				}
 
 				if targetResourceBlock == nil && (tc.expectedModifications > 0 || tc.expectServicesIPV4CIDRBlockRemoved) {
-					t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+					t.Fatalf("Could not find the target resource block type '%s' with name '%s' for verification. Modified HCL:\n%s", blockType, blockName, string(modifiedContentBytes))
 				}
 
 				if targetResourceBlock != nil {
 					var ipAllocationPolicyBlock *hclwrite.Block
-					for _, nestedBlock := range targetResourceBlock.Body().Blocks() {
+					for _, nestedBlock := range targetResourceBlock.Body().Blocks() { // Iterate targetResourceBlock from verifiedFile
 						if nestedBlock.Type() == "ip_allocation_policy" {
 							ipAllocationPolicyBlock = nestedBlock
 							break
@@ -762,22 +783,24 @@ resource "google_container_cluster" "beta" {
 			// Specific check for "Multiple google_container_cluster blocks, one matching for Rule 2"
 			if tc.name == "Multiple google_container_cluster blocks, one matching for Rule 2" {
 				var secondaryBlock *hclwrite.Block
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "secondary" {
+				resourceTypeLabel := "google_container_cluster"
+				resourceNameLabel := "secondary"
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == resourceTypeLabel && b.Labels()[1] == resourceNameLabel {
 						secondaryBlock = b
 						break
 					}
 				}
 				if secondaryBlock == nil {
-					t.Fatalf("Could not find 'secondary' GKE block for multi-block test verification. HCL:\n%s", tc.hclContent)
+					t.Fatalf("Could not find '%s' GKE block named '%s' for multi-block test verification. Modified HCL:\n%s", resourceTypeLabel, resourceNameLabel, string(modifiedContentBytes))
 				}
 				ipAllocSecondary := secondaryBlock.Body().FirstMatchingBlock("ip_allocation_policy", nil)
 				if ipAllocSecondary == nil {
-					t.Fatalf("'ip_allocation_policy' missing in 'secondary' GKE block for multi-block test. HCL:\n%s", tc.hclContent)
+					t.Fatalf("'ip_allocation_policy' missing in 'secondary' GKE block for multi-block test. Modified HCL:\n%s", string(modifiedContentBytes))
 				}
 				if ipAllocSecondary.Body().GetAttribute("services_ipv4_cidr_block") == nil {
-					t.Errorf("'services_ipv4_cidr_block' expected to be PRESENT in 'secondary' GKE's ip_allocation_policy, but was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
-						tc.hclContent, string(modifier.File().Bytes()))
+					t.Errorf("'services_ipv4_cidr_block' expected to be PRESENT in 'secondary' GKE's ip_allocation_policy, but was NOT FOUND. Modified HCL:\n%s",
+						string(modifiedContentBytes))
 				}
 			}
 		})
@@ -986,13 +1009,21 @@ resource "google_container_cluster" "secondary" {
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
+			// Re-parse the modified HCL content for verification
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
 			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetBlock *hclwrite.Block
 
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+				// Corrected logic to find the target resource block
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == blockType && b.Labels()[1] == blockName {
 						targetBlock = b
 						break
 					}
@@ -1000,15 +1031,15 @@ resource "google_container_cluster" "secondary" {
 
 				if targetBlock == nil && (tc.expectClusterIPV4CIDRRemoved || tc.expectedModifications > 0) {
 					// If we expected a change, the block should exist unless the test is about removing the block itself (not the case for Rule1)
-					t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+					t.Fatalf("Could not find the target resource block type '%s' with name '%s' for verification. Modified HCL:\n%s", blockType, blockName, string(modifiedContentBytes))
 				}
 
 				if targetBlock != nil { // Only proceed if block exists
 					hasClusterIPV4CIDR := targetBlock.Body().GetAttribute("cluster_ipv4_cidr") != nil
 					if tc.expectClusterIPV4CIDRRemoved {
 						if hasClusterIPV4CIDR {
-							t.Errorf("Expected 'cluster_ipv4_cidr' to be removed from %s[\"%s\"], but it was found. HCL content:\n%s\nModified HCL:\n%s",
-								blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+							t.Errorf("Expected 'cluster_ipv4_cidr' to be removed from %s[\"%s\"], but it was found. Modified HCL:\n%s",
+								blockType, blockName, string(modifiedContentBytes))
 						}
 					} else {
 						// If not expecting removal, it should be present if it was in the input,
@@ -1026,8 +1057,8 @@ resource "google_container_cluster" "secondary" {
 								}
 							}
 							if originalBlockHasIt && !hasClusterIPV4CIDR {
-								t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. HCL content:\n%s\nModified HCL:\n%s",
-									blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+										t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. Modified HCL:\n%s",
+											blockType, blockName, string(modifiedContentBytes))
 							}
 						}
 					}
@@ -1037,18 +1068,20 @@ resource "google_container_cluster" "secondary" {
 			// Specific check for the "Multiple google_container_cluster blocks, one matching" case
 			if tc.name == "Multiple google_container_cluster blocks, one matching" {
 				var secondaryBlock *hclwrite.Block
-				for _, b := range modifier.File().Body().Blocks() {
-					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "secondary" {
+				resourceTypeLabel := "google_container_cluster"
+				resourceNameLabel := "secondary"
+				for _, b := range verifiedFile.Body().Blocks() { // Use verifiedFile here
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == resourceTypeLabel && b.Labels()[1] == resourceNameLabel {
 						secondaryBlock = b
 						break
 					}
 				}
 				if secondaryBlock == nil {
-					t.Fatalf("Could not find the 'secondary' google_container_cluster block for verification. HCL content:\n%s", tc.hclContent)
+					t.Fatalf("Could not find the '%s' block named '%s' for verification. Modified HCL:\n%s", resourceTypeLabel, resourceNameLabel, string(modifiedContentBytes))
 				}
 				if secondaryBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-					t.Errorf("Expected 'cluster_ipv4_cidr' to be present in 'secondary' block, but it was not. HCL content:\n%s\nModified HCL:\n%s",
-						tc.hclContent, string(modifier.File().Bytes()))
+					t.Errorf("Expected 'cluster_ipv4_cidr' to be present in 'secondary' block, but it was not. Modified HCL:\n%s",
+						string(modifiedContentBytes))
 				}
 			}
 		})
@@ -1063,8 +1096,8 @@ func TestRemoveBlock(t *testing.T) {
 		hclContent      string
 		blockType       string
 		blockLabels     []string
-		expectRemoved   bool 
-		expectCallError bool 
+		expectRemoved   bool
+		expectCallError bool
 	}{
 		{
 			name: "remove existing resource block",
@@ -1090,8 +1123,8 @@ resource "aws_instance" "another_instance" {
 }`,
 			blockType:       "resource",
 			blockLabels:     []string{"aws_instance", "non_existent_instance"},
-			expectRemoved:   false, 
-			expectCallError: true,  
+			expectRemoved:   false,
+			expectCallError: true,
 		},
 		{
 			name: "attempt to remove block with incorrect type but existing labels",
@@ -1100,10 +1133,10 @@ resource "aws_instance" "my_test_instance" {
   ami           = "ami-0c55b31ad2c454370"
   instance_type = "t2.micro"
 }`,
-			blockType:       "data", 
+			blockType:       "data",
 			blockLabels:     []string{"aws_instance", "my_test_instance"},
 			expectRemoved:   false,
-			expectCallError: true, 
+			expectCallError: true,
 		},
 		{
 			name:            "empty HCL content",
@@ -1111,7 +1144,7 @@ resource "aws_instance" "my_test_instance" {
 			blockType:       "resource",
 			blockLabels:     []string{"aws_instance", "my_test_instance"},
 			expectRemoved:   false,
-			expectCallError: true, 
+			expectCallError: true,
 		},
 		{
 			name: "remove data block",
@@ -1141,31 +1174,55 @@ resource "aws_instance" "main" {}
 				t.Fatalf("Failed to close temp file: %v", err)
 			}
 			
-			var logger *zap.Logger 
+			var logger *zap.Logger
 
 			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			if err != nil && tc.hclContent != "" { 
+			if err != nil && tc.hclContent != "" {
 				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
 			} else if err == nil && tc.hclContent == "" {
                  // Allow empty HCL to proceed if NewFromFile handles it (e.g. creates empty body)
             }
 
 
-			err = modifier.RemoveBlock(tc.blockType, tc.blockLabels) 
+			err = modifier.RemoveBlock(tc.blockType, tc.blockLabels)
 			if (err != nil) != tc.expectCallError {
 				t.Fatalf("RemoveBlock() error status = %v (err: %v), expectCallError %v. HCL:\n%s", (err != nil), err, tc.expectCallError, tc.hclContent)
 			}
 
-			foundBlock, getErr := modifier.GetBlock(tc.blockType, tc.blockLabels) 
+			// Re-parse the modified HCL content for verification
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, parseDiags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if parseDiags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", parseDiags, string(modifiedContentBytes))
+			}
+
+			// Use a new GetBlock function or similar logic on verifiedFile
+			var foundBlockInVerified *hclwrite.Block
+			for _, b := range verifiedFile.Body().Blocks() {
+				if b.Type() == tc.blockType && len(b.Labels()) == len(tc.blockLabels) {
+					labelsMatch := true
+					for i, l := range b.Labels() {
+						if l != tc.blockLabels[i] {
+							labelsMatch = false
+							break
+						}
+					}
+					if labelsMatch {
+						foundBlockInVerified = b
+						break
+					}
+				}
+			}
+
 
 			if tc.expectRemoved {
-				if foundBlock != nil || getErr == nil { 
-					t.Errorf("RemoveBlock() expected block %s %v to be removed, but GetBlock found it (block: %v, err: %v). Output HCL:\n%s", tc.blockType, tc.blockLabels, foundBlock, getErr, string(modifier.File().Bytes()))
+				if foundBlockInVerified != nil {
+					t.Errorf("RemoveBlock() expected block %s %v to be removed, but it was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
 				}
-			} else { 
-				initialFile, parseDiags := hclwrite.ParseConfig([]byte(tc.hclContent), tmpFile.Name(), hcl.Pos{Line: 1, Column: 1})
+			} else {
+				initialFile, initialParseDiags := hclwrite.ParseConfig([]byte(tc.hclContent), tmpFile.Name()+"_initial", hcl.InitialPos)
 				initialBlockPresent := false
-				if !parseDiags.HasErrors() && initialFile != nil && initialFile.Body() != nil {
+				if !initialParseDiags.HasErrors() && initialFile != nil && initialFile.Body() != nil {
 					for _, b := range initialFile.Body().Blocks() {
 						if b.Type() == tc.blockType && len(b.Labels()) == len(tc.blockLabels) {
 							match := true
@@ -1179,18 +1236,18 @@ resource "aws_instance" "main" {}
 					}
 				}
 
-				if tc.expectCallError { // If RemoveBlock errored (e.g., block not found)
-					if foundBlock != nil || getErr == nil { // Then GetBlock should also not find it or error
-                         t.Errorf("RemoveBlock() errored as expected for %s %v, but GetBlock still found it (block: %v, err: %v). Output HCL:\n%s", tc.blockType, tc.blockLabels, foundBlock, getErr, string(modifier.File().Bytes()))
+				if tc.expectCallError {
+					if foundBlockInVerified != nil {
+                         t.Errorf("RemoveBlock() errored as expected for %s %v, but block was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
                      }
-				} else { // If RemoveBlock did NOT error (e.g. block was there but shouldn't be removed by this call, or was not there and call did not error)
-					if initialBlockPresent { // And it was there initially
-						if foundBlock == nil || getErr != nil { // It should still be findable
-							t.Errorf("RemoveBlock() did not remove block %s %v as expected (initial state: present), but GetBlock also failed to find it (err: %v). Output HCL:\n%s", tc.blockType, tc.blockLabels, getErr, string(modifier.File().Bytes()))
+				} else {
+					if initialBlockPresent {
+						if foundBlockInVerified == nil {
+							t.Errorf("RemoveBlock() did not remove block %s %v as expected (initial state: present), but it was not found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
 						}
-					} else { // And it was NOT there initially
-						if foundBlock != nil || getErr == nil { // It should still not be findable
-                             t.Errorf("RemoveBlock() logic error: block %s %v was not present initially nor targeted for removal, but GetBlock found it after RemoveBlock (err: %v). Output HCL:\n%s", tc.blockType, tc.blockLabels, getErr, string(modifier.File().Bytes()))
+					} else {
+						if foundBlockInVerified != nil {
+                             t.Errorf("RemoveBlock() logic error: block %s %v was not present initially nor targeted for removal, but was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
                         }
 					}
 				}

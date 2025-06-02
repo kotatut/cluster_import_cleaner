@@ -479,6 +479,7 @@ func (m *Modifier) ApplyRule3() (modifications int, err error) {
 
 			// Rule 3a: Check for a nested block named `binary_authorization`.
 			var binaryAuthorizationBlock *hclwrite.Block
+			// Iterate over nested blocks of the current resource block
 			for _, nestedBlock := range block.Body().Blocks() {
 				if nestedBlock.Type() == "binary_authorization" {
 					binaryAuthorizationBlock = nestedBlock

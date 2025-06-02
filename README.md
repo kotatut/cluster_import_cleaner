@@ -83,4 +83,43 @@ variable "name" {
 ## Logging
 
 The tool uses `go.uber.org/zap` for structured logging. Logs are output to standard error.
+
+## Troubleshooting
+
+### Build Error: `cty.Type does not implement fmt.Stringer`
+
+If you encounter a build error similar to this:
 ```
+hclmodifier/modifier.go:687:142: cannot use autopilotVal.Type() (value of struct type cty.Type) as fmt.Stringer value in argument to zap.Stringer: cty.Type does not implement fmt.Stringer (missing method String)
+```
+This error indicates that a `cty.Type` object (from HashiCorp's HCL library) was likely passed to a logging function (like `zap.Stringer` or `zap.Any`) without being properly converted to a string. `cty.Type` itself does not have a `String()` method that `zap` can use directly for logging.
+
+**Potential Causes and Solutions:**
+
+1.  **Outdated Dependencies:** Your local Go module dependencies might be outdated or incompatible.
+    *   **Solution:** Try updating your dependencies:
+        ```bash
+        go get -u all
+        ```
+
+2.  **Build Cache Issues:** The Go build cache might contain stale information.
+    *   **Solution:** Clean the build cache:
+        ```bash
+        go clean -cache
+        ```
+
+3.  **Go Version or Tooling:** There might be an incompatibility with your Go version or other build tools.
+    *   **Solution:** Ensure you are using a compatible Go version (as specified in prerequisites or try a recent stable version).
+
+4.  **Code Issues (If Developing):** If you are modifying the code, ensure that any `cty.Type` values being logged are first converted to a string representation. The `cty.Type` provides a `FriendlyName()` method for this purpose.
+    *   **Example:**
+        ```go
+        // Assuming 'autopilotVal' is a cty.Value and 'logger' is a zap.Logger
+        // Incorrect:
+        // logger.Info("Autopilot type", zap.Stringer("type", autopilotVal.Type())) // This would cause the error
+
+        // Correct:
+        logger.Info("Autopilot type", zap.String("type", autopilotVal.Type().FriendlyName()))
+        ```
+
+If the error persists after trying these steps, consider reviewing recent code changes or the specific context where `cty.Type` values are handled or logged.
