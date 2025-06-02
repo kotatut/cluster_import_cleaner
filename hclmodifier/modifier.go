@@ -520,3 +520,191 @@ func (m *Modifier) ApplyRule3() (modifications int, err error) {
 	m.logger.Info("ApplyRule3 finished", zap.Int("modifications", modificationCount))
 	return modificationCount, nil
 }
+
+// ApplyAutopilotRule implements the logic for applying Autopilot configurations.
+// 1. Iterate through all blocks in the HCL file.
+// 2. Identify `resource` blocks with type `google_container_cluster`.
+// 3. For each such block:
+//    a. Check for the `enable_autopilot` attribute.
+//    b. If the attribute exists:
+//        i. Get its value.
+//        ii. If the value is `true`:
+//            - Log the action.
+//            - Define a list of attributes to remove.
+//            - Remove these attributes from the block.
+//            - Define a list of nested blocks to remove.
+//            - Remove these nested blocks.
+//            - Specifically handle `cluster_autoscaling` block.
+//            - Specifically handle `binary_authorization` block.
+//        iii. If the value is `false`:
+//            - Log the action.
+//            - Remove the `enable_autopilot` attribute itself.
+//    c. If the `enable_autopilot` attribute is not found, log this.
+// 4. Return the total count of modifications and any error encountered.
+func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
+	m.logger.Info("Starting ApplyAutopilotRule")
+	modificationCount := 0
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyAutopilotRule called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	attributesToRemoveTrue := []string{
+		"enable_shielded_nodes",
+		"remove_default_node_pool",
+		"default_max_pods_per_node",
+		"enable_intranode_visibility",
+		"cluster_ipv4_cidr", // Added as per new requirement
+	}
+	// These are top-level blocks directly under google_container_cluster
+	topLevelNestedBlocksToRemoveTrue := []string{
+		"network_policy", // Remains top-level removal
+		"node_pool",      // Remains top-level removal
+	}
+	// These are blocks to be removed from within addons_config
+	addonsConfigBlocksToRemove := []string{
+		"network_policy_config",
+		"dns_cache_config",
+		"stateful_ha_config",
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource for Autopilot config", zap.String("name", resourceName))
+
+			enableAutopilotAttr, err := m.GetAttribute(block, "enable_autopilot")
+			if err != nil {
+				m.logger.Debug("Attribute 'enable_autopilot' not found", zap.String("resourceName", resourceName))
+				continue // Rule 3c: If attribute not found, do nothing for this block
+			}
+
+			autopilotVal, err := m.GetAttributeValue(enableAutopilotAttr)
+			if err != nil {
+				m.logger.Warn("Could not get value of 'enable_autopilot' attribute", zap.String("resourceName", resourceName), zap.Error(err))
+				continue
+			}
+
+			if autopilotVal.Type() == cty.Bool {
+				if autopilotVal.True() {
+					m.logger.Info("Autopilot enabled for cluster, applying modifications", zap.String("resourceName", resourceName))
+
+					// Remove defined attributes
+					for _, attrName := range attributesToRemoveTrue {
+						if existingAttr := block.Body().GetAttribute(attrName); existingAttr != nil {
+							if err := m.RemoveAttribute(block, attrName); err == nil {
+								modificationCount++
+								m.logger.Debug("Removed attribute", zap.String("attributeName", attrName), zap.String("resourceName", resourceName))
+							} else {
+								m.logger.Error("Error removing attribute", zap.String("attributeName", attrName), zap.String("resourceName", resourceName), zap.Error(err))
+							}
+						} else {
+							m.logger.Debug("Attribute for removal not found, skipping", zap.String("attributeName", attrName), zap.String("resourceName", resourceName))
+						}
+					}
+
+					// Remove defined top-level nested blocks
+					for _, blockName := range topLevelNestedBlocksToRemoveTrue {
+						if blockName == "node_pool" {
+							var nodePoolBlocks []*hclwrite.Block
+							for _, nestedBlock := range block.Body().Blocks() {
+								if nestedBlock.Type() == "node_pool" {
+									nodePoolBlocks = append(nodePoolBlocks, nestedBlock)
+								}
+							}
+							for _, npBlock := range nodePoolBlocks {
+								if removed := block.Body().RemoveBlock(npBlock); removed {
+									modificationCount++
+									m.logger.Debug("Removed top-level nested block (node_pool instance)", zap.String("blockType", npBlock.Type()), zap.Strings("labels", npBlock.Labels()), zap.String("resourceName", resourceName))
+								} else {
+									m.logger.Warn("Failed to remove node_pool block by reference", zap.String("blockName", npBlock.Type()), zap.String("resourceName", resourceName))
+								}
+							}
+						} else {
+							// For other uniquely named top-level nested blocks (e.g., network_policy)
+							if nestedBlock := block.Body().FirstMatchingBlock(blockName, nil); nestedBlock != nil {
+								if removed := block.Body().RemoveBlock(nestedBlock); removed {
+									modificationCount++
+									m.logger.Debug("Removed top-level nested block", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+								} else {
+									m.logger.Warn("Failed to remove top-level nested block by name", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+								}
+							} else {
+								m.logger.Debug("Top-level nested block for removal not found, skipping", zap.String("blockName", blockName), zap.String("resourceName", resourceName))
+							}
+						}
+					}
+
+					// Handle addons_config nested blocks
+					if addonsConfigBlock := block.Body().FirstMatchingBlock("addons_config", nil); addonsConfigBlock != nil {
+						m.logger.Debug("Processing 'addons_config' block", zap.String("resourceName", resourceName))
+						for _, blockNameToRemoveInAddons := range addonsConfigBlocksToRemove {
+							if nestedAddonBlock := addonsConfigBlock.Body().FirstMatchingBlock(blockNameToRemoveInAddons, nil); nestedAddonBlock != nil {
+								if removed := addonsConfigBlock.Body().RemoveBlock(nestedAddonBlock); removed {
+									modificationCount++
+									m.logger.Debug("Removed block from 'addons_config'", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+								} else {
+									m.logger.Warn("Failed to remove block from 'addons_config'", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+								}
+							} else {
+								m.logger.Debug("Block for removal not found in 'addons_config', skipping", zap.String("blockName", blockNameToRemoveInAddons), zap.String("resourceName", resourceName))
+							}
+						}
+					} else {
+						m.logger.Debug("'addons_config' block not found, skipping removal of its sub-blocks", zap.String("resourceName", resourceName))
+					}
+
+					// Specifically handle cluster_autoscaling
+					if caBlock := block.Body().FirstMatchingBlock("cluster_autoscaling", nil); caBlock != nil {
+						m.logger.Debug("Processing 'cluster_autoscaling' block", zap.String("resourceName", resourceName))
+						if caBlock.Body().GetAttribute("enabled") != nil {
+							if err := m.RemoveAttribute(caBlock, "enabled"); err == nil { // m.RemoveAttribute handles logging if not found before trying to remove
+								modificationCount++
+								m.logger.Debug("Removed 'enabled' from 'cluster_autoscaling'", zap.String("resourceName", resourceName))
+							}
+						} else {
+							m.logger.Debug("'enabled' attribute not found in 'cluster_autoscaling'", zap.String("resourceName", resourceName))
+						}
+						if caBlock.Body().GetAttribute("resource_limits") != nil {
+							if err := m.RemoveAttribute(caBlock, "resource_limits"); err == nil {
+								modificationCount++
+								m.logger.Debug("Removed 'resource_limits' from 'cluster_autoscaling'", zap.String("resourceName", resourceName))
+							}
+						} else {
+							m.logger.Debug("'resource_limits' attribute not found in 'cluster_autoscaling'", zap.String("resourceName", resourceName))
+						}
+						// As per instruction: "If the block becomes empty or only contains autoscaling_profile = "BALANCED", consider removing the whole block or just the specific attributes. For now, just remove enabled and resource_limits."
+						// We will not remove the block for now.
+					}
+
+					// Specifically handle binary_authorization
+					if baBlock := block.Body().FirstMatchingBlock("binary_authorization", nil); baBlock != nil {
+						m.logger.Debug("Processing 'binary_authorization' block", zap.String("resourceName", resourceName))
+						if baBlock.Body().GetAttribute("enabled") != nil {
+							if err := m.RemoveAttribute(baBlock, "enabled"); err == nil {
+								modificationCount++
+								m.logger.Debug("Removed 'enabled' from 'binary_authorization'", zap.String("resourceName", resourceName))
+							}
+						} else {
+							m.logger.Debug("'enabled' attribute not found in 'binary_authorization'", zap.String("resourceName", resourceName))
+						}
+					}
+
+				} else { // enable_autopilot = false
+					m.logger.Info("Autopilot explicitly disabled for cluster, removing 'enable_autopilot' attribute", zap.String("resourceName", resourceName))
+					// Ensure 'enable_autopilot' actually exists before trying to remove and incrementing.
+					// GetAttribute was already called for enableAutopilotAttr, so we know it exists.
+					if err := m.RemoveAttribute(block, "enable_autopilot"); err == nil {
+						modificationCount++
+					}
+				}
+			} else {
+				m.logger.Warn("'enable_autopilot' attribute is not a boolean value", zap.String("resourceName", resourceName), zap.Stringer("valueType", autopilotVal.Type()))
+			}
+		}
+	}
+
+	m.logger.Info("ApplyAutopilotRule finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}
