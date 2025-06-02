@@ -701,7 +701,7 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 					}
 				}
 			} else {
-				m.logger.Warn("'enable_autopilot' attribute is not a boolean value", zap.String("resourceName", resourceName), zap.Stringer("valueType", autopilotVal.Type()))
+				m.logger.Warn("'enable_autopilot' attribute is not a boolean value", zap.String("resourceName", resourceName), zap.String("valueType", autopilotVal.Type().FriendlyName()))
 			}
 		}
 	}
