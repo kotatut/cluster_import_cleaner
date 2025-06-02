@@ -1,16 +1,27 @@
 package rules
 
 import (
-	"fmt"
-
-	"go.uber.org/zap" 
-
-	"github.com/GoogleCloudPlatform/hcl-modifier/pkg/hclmodifier" // Import the hclmodifier package
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
 )
 
-// MasterCIDRRuleDefinition defines the logic for MasterCIDRRule.
+// MasterCIDRRuleDefinition defines a rule for handling potential conflicts related to master IP configuration
+// in `google_container_cluster` resources, specifically when a cluster is private.
+//
+// What it does: It checks if a `google_container_cluster` resource has both a `master_ipv4_cidr_block` defined
+// and a `private_cluster_config` block that contains a `private_endpoint_subnetwork` attribute.
+// If all these conditions are met, it removes the `private_endpoint_subnetwork` attribute from the
+// `private_cluster_config` block.
+//
+// Why it's necessary for GKE imports: When importing a private GKE cluster, Terraform might generate
+// configuration that includes both `master_ipv4_cidr_block` and `private_cluster_config.private_endpoint_subnetwork`.
+// The `master_ipv4_cidr_block` is used to specify the IP range for the master, and for private clusters,
+// the master's endpoint is within this range and typically doesn't need a separate subnetwork defined via
+// `private_endpoint_subnetwork`. Including `private_endpoint_subnetwork` can be redundant or even lead to
+// configuration errors if it's not set to the correct master IP or if it's not actually needed.
+// This rule simplifies the configuration for private clusters by removing this potentially problematic attribute
+// when `master_ipv4_cidr_block` is already specified.
 var MasterCIDRRuleDefinition = hclmodifier.Rule{
-	Name:               "MasterCIDRRule: Remove private_endpoint_subnetwork if master_ipv4_cidr_block and private_cluster_config exist",
+	Name:               "Master CIDR Rule: Remove private_endpoint_subnetwork if master_ipv4_cidr_block and private_cluster_config exist",
 	TargetResourceType: "google_container_cluster",
 	Conditions: []hclmodifier.RuleCondition{
 		{
@@ -32,28 +43,4 @@ var MasterCIDRRuleDefinition = hclmodifier.Rule{
 			Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
 		},
 	},
-}
-
-// ApplyMasterCIDRRule implements the logic for MasterCIDRRule using the generic ApplyRules engine.
-// Original detailed comments moved to MasterCIDRRuleDefinition.
-// 1. Initialize modificationCount to 0.
-// 2. Log the start of the rule application.
-// 3. Iterate through all 'resource' blocks of type 'google_container_cluster'.
-// 4. For each cluster:
-//    a. Check for 'master_ipv4_cidr_block' attribute.
-//    b. Find 'private_cluster_config' nested block.
-//    c. If found, check for 'private_endpoint_subnetwork' attribute within it.
-//    d. If 'master_ipv4_cidr_block' and 'private_cluster_config.private_endpoint_subnetwork' exist,
-//       remove 'private_endpoint_subnetwork'.
-// 5. Log actions and increment modificationCount.
-// 6. Log completion and return modificationCount.
-func (m *hclmodifier.Modifier) ApplyMasterCIDRRule() (modifications int, err error) {
-	m.Logger.Info("Applying MasterCIDRRule using the generic ApplyRules engine.")
-	mods, errs := m.ApplyRules([]hclmodifier.Rule{MasterCIDRRuleDefinition})
-	if len(errs) > 0 {
-		m.Logger.Error("Error(s) applying MasterCIDRRuleDefinition.", zap.Errors("errors", errs))
-		return mods, fmt.Errorf("errors applying MasterCIDRRuleDefinition: %v", errs)
-	}
-	m.Logger.Info("MasterCIDRRule applied successfully.", zap.Int("modifications", mods))
-	return mods, nil
 }

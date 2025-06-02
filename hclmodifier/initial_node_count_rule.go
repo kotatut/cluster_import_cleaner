@@ -1,32 +1,41 @@
-package rules
+package hclmodifier
 
 import (
 	"fmt"
 
 	"go.uber.org/zap"
-
-	"github.com/GoogleCloudPlatform/hcl-modifier/pkg/hclmodifier"
+	// "github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // No longer needed for local Rule type
 )
 
-// InitialNodeCountRuleDefinition is a placeholder for the InitialNodeCountRule.
-// The current ApplyRules engine may not fully support its complex logic (iteration over node_pools).
-// Thus, ApplyInitialNodeCountRule will continue to use its direct implementation.
-var InitialNodeCountRuleDefinition = hclmodifier.Rule{
-	Name:               "InitialNodeCountRule: Placeholder - Complex logic handled by ApplyInitialNodeCountRule",
+// InitialNodeCountRuleDefinition is a placeholder for the InitialNodeCountRule because its logic,
+// which involves iterating over `node_pool` sub-blocks and conditionally removing attributes,
+// is handled by the direct implementation in ApplyInitialNodeCountRule.
+// This definition is not meant to be used by the generic ApplyRules engine.
+//
+// What it does (effectively via ApplyInitialNodeCountRule): For each `node_pool` within a `google_container_cluster`,
+// it removes the `initial_node_count` attribute if it exists. It doesn't matter if `node_count` is present or not.
+//
+// Why it's necessary for GKE imports: After importing a GKE cluster, `node_pool` blocks might contain
+// `initial_node_count`. While this attribute is used for creation, for existing node pools (especially those
+// managed by autoscaling or with a `node_count` attribute), `initial_node_count` can be problematic.
+// It can cause diffs if the current node count (managed by `node_count` or autoscaler) doesn't match,
+// or it might attempt to resize the node pool on apply if `node_count` is not set.
+// Removing `initial_node_count` defers to `node_count` or autoscaling for managing the number of nodes,
+// which is generally the desired state for imported and ongoing management.
+var InitialNodeCountRuleDefinition = Rule{ // Use local Rule type
+	Name:               "Initial Node Count Rule: Remove initial_node_count from node_pools (handled by ApplyInitialNodeCountRule)",
 	TargetResourceType: "google_container_cluster",
+	// Conditions and Actions are omitted as this rule is not processed by the generic engine.
 }
 
-// ApplyInitialNodeCountRule implements the logic for managing 'initial_node_count'
-// and 'node_count' attributes within 'node_pool' blocks of 'google_container_cluster' resources.
-// 1. Initialize modificationCount to 0.
-// 2. Log the start of the rule application.
-// 3. Iterate through all 'resource' blocks of type 'google_container_cluster'.
-// 4. For each cluster, iterate through its 'node_pool' nested blocks.
-// 5. If both 'initial_node_count' and 'node_count' exist, remove 'initial_node_count'.
-// 6. If only 'initial_node_count' exists, remove it.
-// 7. Log actions and increment modificationCount.
-// 8. Log completion and return modificationCount.
-func (m *hclmodifier.Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
+// ApplyInitialNodeCountRule removes the `initial_node_count` attribute from all `node_pool` blocks
+// within a `google_container_cluster` resource. This is to prevent conflicts or unintended resize
+// operations after a cluster import, as `node_count` or autoscaling should manage the node count
+// for existing node pools.
+//
+// This function is called directly and does not use the generic Rule engine due to its specific
+// iteration and logic for `node_pool` sub-blocks.
+func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
 	modificationCount := 0
 	var firstError error
 	m.Logger.Info("Starting ApplyInitialNodeCountRule (using path-based helpers).")

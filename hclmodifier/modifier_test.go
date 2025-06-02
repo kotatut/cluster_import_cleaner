@@ -10,81 +10,120 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
+	"github.com/stretchr/testify/assert" // For assertions
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // Import for rule definitions
 )
 
-func TestModifyNameAttributes(t *testing.T) {
-	t.Helper()
-
-	const expectedSuffix = "-clone"
-
+func TestEnhancedAttributeValueEquals(t *testing.T) {
+	logger := zap.NewNop()
 	tests := []struct {
-		name              string
-		hclContent        string
-		expectedName      string
-		expectedAttrCount int
+		name                  string
+		hclContent            string
+		rule                  Rule
+		expectedModifications int
+		expectAttributeRemoved bool // Or other specific checks for your test
+		attributePathToRemove []string // Path to attribute that rule should remove
 	}{
 		{
-			name: "single resource with name",
-			hclContent: `resource "aws_instance" "example" {
-  name = "test_name"
-}`,
-			expectedName:      "test_name" + expectedSuffix,
-			expectedAttrCount: 1,
+			name: "AttributeValueEquals with boolean true",
+			hclContent: `resource "google_container_cluster" "test" {
+				enable_legacy_abac = true
+				some_other_attr = "foo"
+			}`,
+			rule: Rule{
+				Name:               "TestBoolEqualsTrue",
+				TargetResourceType: "google_container_cluster",
+				Conditions: []RuleCondition{
+					{Type: AttributeExists, Path: []string{"enable_legacy_abac"}},
+					{Type: AttributeValueEquals, Path: []string{"enable_legacy_abac"}, ExpectedValue: "true"},
+				},
+				Actions: []RuleAction{{Type: RemoveAttribute, Path: []string{"some_other_attr"}}},
+			},
+			expectedModifications: 1,
+			expectAttributeRemoved: true,
+			attributePathToRemove: []string{"some_other_attr"},
 		},
 		{
-			name: "multiple resources with name",
-			hclContent: `resource "aws_instance" "example1" {
-  name = "test_name1"
-}
-resource "aws_instance" "example2" {
-  name = "test_name2"
-}`,
-			expectedName:      "test_name1" + expectedSuffix,
-			expectedAttrCount: 2,
+			name: "AttributeValueEquals with boolean false",
+			hclContent: `resource "google_container_cluster" "test" {
+				enable_legacy_abac = false
+				some_other_attr = "bar"
+			}`,
+			rule: Rule{
+				Name:               "TestBoolEqualsFalse",
+				TargetResourceType: "google_container_cluster",
+				Conditions: []RuleCondition{
+					{Type: AttributeValueEquals, Path: []string{"enable_legacy_abac"}, ExpectedValue: "false"},
+				},
+				Actions: []RuleAction{{Type: RemoveAttribute, Path: []string{"some_other_attr"}}},
+			},
+			expectedModifications: 1,
+			expectAttributeRemoved: true,
+			attributePathToRemove: []string{"some_other_attr"},
 		},
 		{
-			name: "resource without name",
-			hclContent: `resource "aws_instance" "example" {
-  ami = "ami-0c55b31ad2c454370"
-}`,
-			expectedName:      "",
-			expectedAttrCount: 0,
+			name: "AttributeValueEquals with integer",
+			hclContent: `resource "google_container_cluster" "test" {
+				max_pods_per_node = 110
+				another_attr = "baz"
+			}`,
+			rule: Rule{
+				Name:               "TestIntEquals",
+				TargetResourceType: "google_container_cluster",
+				Conditions: []RuleCondition{
+					{Type: AttributeValueEquals, Path: []string{"max_pods_per_node"}, ExpectedValue: "110"},
+				},
+				Actions: []RuleAction{{Type: RemoveAttribute, Path: []string{"another_attr"}}},
+			},
+			expectedModifications: 1,
+			expectAttributeRemoved: true,
+			attributePathToRemove: []string{"another_attr"},
 		},
 		{
-			name: "resource with empty name",
-			hclContent: `resource "aws_instance" "example" {
-  name = ""
-}`,
-			expectedName:      "" + expectedSuffix,
-			expectedAttrCount: 1,
+			name: "AttributeValueEquals with float (parsed as number)",
+			hclContent: `resource "google_container_cluster" "test" {
+				monitoring_config {
+					advanced_datapath_observability_config {
+						relay_log_level_percent = 50.5
+					}
+				}
+				attr_to_remove = "qux"
+			}`,
+			rule: Rule{
+				Name:               "TestFloatEquals",
+				TargetResourceType: "google_container_cluster",
+				Conditions: []RuleCondition{
+					{Type: AttributeValueEquals, Path: []string{"monitoring_config", "advanced_datapath_observability_config", "relay_log_level_percent"}, ExpectedValue: "50.5"},
+				},
+				Actions: []RuleAction{{Type: RemoveAttribute, Path: []string{"attr_to_remove"}}},
+			},
+			expectedModifications: 1,
+			expectAttributeRemoved: true,
+			attributePathToRemove: []string{"attr_to_remove"},
 		},
 		{
-			name: "terraform block with name attribute",
-			hclContent: `terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
-    }
-  }
-  name = "my_terraform_block"
-}`,
-			expectedName:      "",
-			expectedAttrCount: 0,
-		},
-		{
-			name: "resource with complex name expression",
-			hclContent: `resource "aws_instance" "example" {
-  name = local.name
-}`,
-			expectedName:      "",
-			expectedAttrCount: 0,
+			name: "AttributeValueEquals - condition not met (bool)",
+			hclContent: `resource "google_container_cluster" "test" {
+				enable_legacy_abac = true
+				some_other_attr = "foo"
+			}`,
+			rule: Rule{
+				Name:               "TestBoolNotEquals",
+				TargetResourceType: "google_container_cluster",
+				Conditions: []RuleCondition{
+					{Type: AttributeValueEquals, Path: []string{"enable_legacy_abac"}, ExpectedValue: "false"},
+				},
+				Actions: []RuleAction{{Type: RemoveAttribute, Path: []string{"some_other_attr"}}},
+			},
+			expectedModifications: 0,
+			expectAttributeRemoved: false,
+			attributePathToRemove: []string{"some_other_attr"},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tmpFile, err := os.CreateTemp("", "test_*.hcl")
+			tmpFile, err := os.CreateTemp("", "test_attr_val_equals_*.hcl")
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
@@ -97,57 +136,144 @@ resource "aws_instance" "example2" {
 				t.Fatalf("Failed to close temp file: %v", err)
 			}
 
-			modifier, err := NewFromFile(tmpFile.Name(), nil)
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
 			if err != nil {
-				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				t.Fatalf("NewFromFile() error = %v", err)
 			}
 
-			modifiedCount, err := modifier.ModifyNameAttributes()
-			if err != nil {
-				t.Fatalf("ModifyNameAttributes() error = %v", err)
-			}
+			modifications, errs := modifier.ApplyRules([]Rule{tc.rule})
+			assert.Empty(t, errs, "ApplyRules should not return errors for these test cases")
+			assert.Equal(t, tc.expectedModifications, modifications)
 
-			if modifiedCount != tc.expectedAttrCount {
-				t.Errorf("ModifyNameAttributes() modifiedCount = %v, want %v", modifiedCount, tc.expectedAttrCount)
-			}
-
-			if tc.expectedAttrCount > 0 && tc.expectedName != "" {
-				var foundTheSpecificExpectedName bool
-
-				for _, block := range modifier.File().Body().Blocks() {
-					if block.Type() != "resource" {
-						continue
+			if tc.expectAttributeRemoved {
+				resourceBlock, _ := modifier.GetBlock("resource", []string{"google_container_cluster", "test"})
+				assert.NotNil(t, resourceBlock, "Test resource block should exist")
+				if resourceBlock != nil {
+					_, attr, _ := modifier.GetAttributeValueByPath(resourceBlock.Body(), tc.attributePathToRemove)
+					assert.Nil(t, attr, "Attribute '%s' should have been removed", tc.attributePathToRemove)
+				}
+			} else if tc.expectedModifications == 0 { // Check attribute still exists if no modification was expected
+					resourceBlock, _ := modifier.GetBlock("resource", []string{"google_container_cluster", "test"})
+					assert.NotNil(t, resourceBlock, "Test resource block should exist")
+					if resourceBlock != nil {
+						_, attr, _ := modifier.GetAttributeValueByPath(resourceBlock.Body(), tc.attributePathToRemove)
+						assert.NotNil(t, attr, "Attribute '%s' should still exist", tc.attributePathToRemove)
 					}
-					if nameAttr, ok := block.Body().Attributes()["name"]; ok {
-						exprBytes := nameAttr.Expr().BuildTokens(nil).Bytes()
-						expr, diagsParse := hclsyntax.ParseExpression(exprBytes, tmpFile.Name()+"#nameattr", hcl.Pos{Line: 1, Column: 1})
-						if diagsParse.HasErrors() {
-							t.Logf("Skipping attribute due to parse error during verification: %v", diagsParse)
-							continue
-						}
-						
-						valNode, diagsValue := expr.Value(nil)
-						if diagsValue.HasErrors() {
-							t.Logf("Skipping attribute due to value error during verification: %v", diagsValue)
-							continue
-						}
+			}
+		})
+	}
+}
 
-						if valNode.Type() == cty.String {
-							extractedName := valNode.AsString()
-							if extractedName == tc.expectedName {
-								foundTheSpecificExpectedName = true
-								break
-							}
-						}
+
+func TestRuleSetAttributeValue(t *testing.T) {
+	logger := zap.NewNop()
+	tests := []struct {
+		name                  string
+		hclContent            string
+		rule                  Rule
+		expectedModifications int
+		expectedHCLContent    string
+	}{
+		{
+			name: "Set string attribute",
+			hclContent: `resource "google_container_cluster" "test" {
+				description = "Initial description"
+			}`,
+			rule: Rule{
+				Name:               "TestSetStringValue",
+				TargetResourceType: "google_container_cluster",
+				Conditions:         []RuleCondition{{Type: AttributeExists, Path: []string{"description"}}},
+				Actions:            []RuleAction{{Type: SetAttributeValue, Path: []string{"description"}, ValueToSet: "Updated description"}},
+			},
+			expectedModifications: 1,
+			expectedHCLContent: `resource "google_container_cluster" "test" {
+				description = "Updated description"
+			}`,
+		},
+		{
+			name: "Set boolean attribute",
+			hclContent: `resource "google_container_cluster" "test" {
+				enable_shielded_nodes = false
+			}`,
+			rule: Rule{
+				Name:               "TestSetBoolValue",
+				TargetResourceType: "google_container_cluster",
+				Actions:            []RuleAction{{Type: SetAttributeValue, Path: []string{"enable_shielded_nodes"}, ValueToSet: "true"}},
+			},
+			expectedModifications: 1,
+			expectedHCLContent: `resource "google_container_cluster" "test" {
+				enable_shielded_nodes = true
+			}`,
+		},
+		{
+			name: "Set integer attribute",
+			hclContent: `resource "google_container_cluster" "test" {
+				node_locations = []
+				monitoring_config {
+					advanced_datapath_observability_config {
+						relay_log_level_percent = 0
 					}
 				}
-
-				if !foundTheSpecificExpectedName {
-					t.Errorf("ModifyNameAttributes() did not find a resource with the expected modified name '%s'. Output HCL:\n%s", tc.expectedName, string(modifier.File().Bytes()))
+			}`,
+			rule: Rule{
+				Name:               "TestSetIntValue",
+				TargetResourceType: "google_container_cluster",
+				Actions:            []RuleAction{{Type: SetAttributeValue, Path: []string{"monitoring_config", "advanced_datapath_observability_config", "relay_log_level_percent"}, ValueToSet: "75"}},
+			},
+			expectedModifications: 1,
+			expectedHCLContent: `resource "google_container_cluster" "test" {
+				node_locations = []
+				monitoring_config {
+					advanced_datapath_observability_config {
+						relay_log_level_percent = 75
+					}
 				}
-			} else if tc.expectedAttrCount == 0 && tc.expectedName != "" {
-				t.Logf("Test case info: expectedAttrCount is 0. expectedName ('%s') is set; this test primarily verifies count, not specific name absence/presence unless count > 0.", tc.expectedName)
+			}`,
+		},
+		{
+			name: "Set new attribute",
+			hclContent: `resource "google_container_cluster" "test" {
+			}`,
+			rule: Rule{
+				Name:               "TestSetNewAttribute",
+				TargetResourceType: "google_container_cluster",
+				Actions:            []RuleAction{{Type: SetAttributeValue, Path: []string{"new_attribute"}, ValueToSet: "new_value"}},
+			},
+			expectedModifications: 1,
+			expectedHCLContent: `resource "google_container_cluster" "test" {
+				new_attribute = "new_value"
+			}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "test_set_attr_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
 			}
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.Write([]byte(tc.hclContent))
+			assert.NoError(t, err, "Failed to write to temp file")
+			err = tmpFile.Close()
+			assert.NoError(t, err, "Failed to close temp file")
+			
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			assert.NoError(t, err, "NewFromFile() error")
+
+			modifications, errs := modifier.ApplyRules([]Rule{tc.rule})
+			assert.Empty(t, errs, "ApplyRules should not return errors for these test cases")
+			assert.Equal(t, tc.expectedModifications, modifications)
+
+			// Normalize and compare HCL content
+			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
+			assert.False(t, diags.HasErrors(), "Failed to parse expected HCL content: %v", diags)
+			
+			actualF, diags := hclwrite.ParseConfig(modifier.File().Bytes(), "actual.hcl", hcl.InitialPos)
+			assert.False(t, diags.HasErrors(), "Failed to parse actual HCL content: %v", diags)
+
+			assert.Equal(t, string(expectedF.Bytes()), string(actualF.Bytes()), "HCL content mismatch")
 		})
 	}
 }
@@ -271,7 +397,7 @@ func TestApplyRuleRemoveNodeVersion(t *testing.T) {
 				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
 			}
 
-			modifications, errs := modifier.ApplyRules([]Rule{RuleRemoveNodeVersion})
+			modifications, errs := modifier.ApplyRules([]Rule{rules.RuleRemoveNodeVersion})
 			if len(errs) > 0 {
 				var errorMessages string
 				for _, e := range errs {
@@ -975,13 +1101,17 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyMasterCIDRRule()
-			if ruleErr != nil {
-				t.Fatalf("ApplyMasterCIDRRule() error = %v", ruleErr)
+			modifications, errs := modifier.ApplyRules([]Rule{rules.MasterCIDRRuleDefinition})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(rules.MasterCIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
 			}
-
+			
 			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyMasterCIDRRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+				t.Errorf("ApplyRules(rules.MasterCIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
@@ -1127,7 +1257,7 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 	}
 }
 
-func TestApplyRule3(t *testing.T) {
+func TestApplyBinaryAuthorizationRule(t *testing.T) {
 	t.Helper()
 	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
 
@@ -1290,10 +1420,10 @@ resource "google_container_cluster" "gke_two" {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
-							t.Errorf("ApplyRule3() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+							t.Errorf("ApplyBinaryAuthorizationRule() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
 						}
 						if ruleErr != nil {
-							t.Errorf("ApplyRule3() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+							t.Errorf("ApplyBinaryAuthorizationRule() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
 						}
 						return
 					}
@@ -1302,13 +1432,17 @@ resource "google_container_cluster" "gke_two" {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyRule3()
-			if ruleErr != nil {
-				t.Fatalf("ApplyRule3() error = %v", ruleErr)
+			modifications, errs := modifier.ApplyRules([]Rule{rules.BinaryAuthorizationRuleDefinition})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(BinaryAuthorizationRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRule3() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+				t.Errorf("ApplyRules(BinaryAuthorizationRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
@@ -1413,7 +1547,7 @@ resource "google_container_cluster" "gke_two" {
 	}
 }
 
-func TestApplyRule2(t *testing.T) {
+func TestApplyServicesIPV4CIDRRule(t *testing.T) {
 	t.Helper()
 	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
 
@@ -1582,10 +1716,10 @@ resource "google_container_cluster" "beta" {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
-							t.Errorf("ApplyRule2() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+							t.Errorf("ApplyServicesIPV4CIDRRule() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
 						}
 						if ruleErr != nil {
-							t.Errorf("ApplyRule2() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+							t.Errorf("ApplyServicesIPV4CIDRRule() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
 						}
 						return
 					}
@@ -1594,13 +1728,17 @@ resource "google_container_cluster" "beta" {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyRule2()
-			if ruleErr != nil {
-				t.Fatalf("ApplyRule2() error = %v", ruleErr)
+			modifications, errs := modifier.ApplyRules([]Rule{rules.ServicesIPV4CIDRRuleDefinition})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(ServicesIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRule2() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+				t.Errorf("ApplyRules(ServicesIPV4CIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
@@ -1690,7 +1828,7 @@ resource "google_container_cluster" "beta" {
 	}
 }
 
-func TestApplyRule1(t *testing.T) {
+func TestApplyClusterIPV4CIDRRule(t *testing.T) {
 	t.Helper()
 	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
 
@@ -1851,10 +1989,10 @@ resource "google_container_cluster" "secondary" {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
-							t.Errorf("ApplyRule1() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+							t.Errorf("ApplyClusterIPV4CIDRRule() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
 						}
 						if ruleErr != nil {
-							t.Errorf("ApplyRule1() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+							t.Errorf("ApplyClusterIPV4CIDRRule() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
 						}
 						return
 					}
@@ -1863,13 +2001,17 @@ resource "google_container_cluster" "secondary" {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyRule1()
-			if ruleErr != nil {
-				t.Fatalf("ApplyRule1() error = %v", ruleErr)
+			modifications, errs := modifier.ApplyRules([]Rule{rules.ClusterIPV4CIDRRuleDefinition})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(ClusterIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRule1() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+				t.Errorf("ApplyRules(ClusterIPV4CIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
 			}
 
@@ -2727,7 +2869,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 		hclContent            string
 		expectedHCLContent    string
 		expectedModifications int
-		ruleToApply           Rule
+		ruleToApply           Rule // This should be hclmodifier.Rule (local type)
 	}{
 		{
 			name: "logging_service should be removed when telemetry is ENABLED",
@@ -2747,7 +2889,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   }
 }`,
 			expectedModifications: 1,
-			ruleToApply:           RuleRemoveLoggingService,
+			ruleToApply:           rules.RuleRemoveLoggingService, // This assigns rules.Rule to hclmodifier.Rule
 		},
 		{
 			name: "logging_service should NOT be removed when telemetry is DISABLED",
@@ -2768,7 +2910,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   }
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveLoggingService,
+			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
 			name: "logging_service should NOT be removed when telemetry block is missing",
@@ -2783,7 +2925,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   logging_service  = "logging.googleapis.com/kubernetes"
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveLoggingService,
+			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
 			name: "logging_service should NOT be removed if logging_service attribute is missing",
@@ -2802,7 +2944,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   }
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveLoggingService,
+			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
 			name: "Non-GKE resource with similar structure, should not be modified",
@@ -2821,7 +2963,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   }
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveLoggingService,
+			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 	}
 
@@ -2880,7 +3022,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 		hclContent            string
 		expectedHCLContent    string
 		expectedModifications int
-		ruleToApply           Rule
+			ruleToApply           Rule // This should be hclmodifier.Rule (local type)
 	}{
 		{
 			name: "monitoring_service should be removed when monitoring_config block exists",
@@ -2900,7 +3042,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
   }
 }`,
 			expectedModifications: 1,
-			ruleToApply:           RuleRemoveMonitoringService,
+			ruleToApply:           rules.RuleRemoveMonitoringService, // This assigns rules.Rule to hclmodifier.Rule
 		},
 		{
 			name: "monitoring_service should NOT be removed when monitoring_config block is missing",
@@ -2915,7 +3057,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveMonitoringService,
+			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
 		{
 			name: "monitoring_service should NOT be removed if monitoring_service attribute is missing",
@@ -2934,7 +3076,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
   }
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveMonitoringService,
+			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
 		{
 			name: "Non-GKE resource with similar structure, should not be modified",
@@ -2953,7 +3095,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
   }
 }`,
 			expectedModifications: 0,
-			ruleToApply:           RuleRemoveMonitoringService,
+			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
 	}
 

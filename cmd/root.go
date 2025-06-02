@@ -6,10 +6,12 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
 )
 
 var logger *zap.Logger
-var filePathVariable string // Variable to store the file path from the flag
+// filePathFlag stores the path to the HCL file to be modified, provided via the --file flag.
+var filePathFlag string 
 
 func init() {
 	var err error
@@ -20,7 +22,7 @@ func init() {
 	}
 
 	// Define the persistent --file flag
-	rootCmd.PersistentFlags().StringVar(&filePathVariable, "file", "", "Path to the HCL file to modify (required)")
+	rootCmd.PersistentFlags().StringVar(&filePathFlag, "file", "", "Path to the HCL file to modify (required)")
 	// Mark the --file flag as required
 	if err := rootCmd.MarkPersistentFlagRequired("file"); err != nil {
 		// This error should ideally not happen for a newly defined flag.
@@ -30,18 +32,25 @@ func init() {
 	}
 }
 
+// rootCmd represents the base command when called without any subcommands.
+// It's configured to parse a GKE Terraform file, apply a series of cleaning rules,
+// and save the modified file. The primary GKE-specific logic is encapsulated
+// within the hclmodifier package and its rules.
 var rootCmd = &cobra.Command{
-	Use:   "tf-modifier", // Removed [file-path] from Use, as it's now a flag
-	Short: "A CLI tool to modify Terraform files",
-	Long:  `tf-modifier is a CLI tool that parses a Terraform (.tf) file, appends "-clone" to all "name" attributes, and saves the changes.`,
-	// Args: cobra.ExactArgs(1), // Removed positional argument validation
+	Use:   "gke-tf-cleaner", 
+	Short: "A CLI tool to clean and modify Terraform HCL files for GKE clusters.",
+	Long:  `gke-tf-cleaner is a command-line utility that processes a given Terraform HCL file.
+It applies a predefined set of rules to clean up common issues found in configurations
+for Google Kubernetes Engine (GKE) clusters, especially those generated from Terraform imports
+or older templates. The tool modifies the file in-place.`,
+	// Args: cobra.ExactArgs(1), // Positional argument for file path was replaced by a --file flag.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// filePath := args[0] // Removed: file path now comes from filePathVariable
-		logger.Info("Processing file", zap.String("filePath", filePathVariable))
+		// filePath := args[0] // Removed: file path now comes from filePathFlag
+		logger.Info("Processing file", zap.String("filePath", filePathFlag))
 
 		// 1. Parse the HCL file using the hclmodifier package.
 		// The logger from cmd/root.go is passed to the package function.
-		hclFile, err := hclmodifier.NewFromFile(filePathVariable, logger)
+		hclFile, err := hclmodifier.NewFromFile(filePathFlag, logger)
 		if err != nil {
 			// NewFromFile already logs the detailed error.
 			return fmt.Errorf("failed to parse HCL file: %w", err)
@@ -49,57 +58,62 @@ var rootCmd = &cobra.Command{
 
 		// 2. Define all rules to be applied by the generic ApplyRules engine.
 		allRules := []hclmodifier.Rule{
-			hclmodifier.Rule1Definition,
-			hclmodifier.MasterCIDRRuleDefinition,
-			hclmodifier.Rule2Definition,
-			hclmodifier.Rule3Definition,
-			hclmodifier.RuleRemoveLoggingService,
-			hclmodifier.RuleRemoveMonitoringService,
-			hclmodifier.RuleRemoveNodeVersion,
+			rules.ClusterIPV4CIDRRuleDefinition,
+			rules.MasterCIDRRuleDefinition,
+			rules.ServicesIPV4CIDRRuleDefinition,
+			rules.BinaryAuthorizationRuleDefinition,
+			rules.RuleRemoveLoggingService,
+			rules.RuleRemoveMonitoringService,
+			rules.RuleRemoveNodeVersion,
 			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
 			// due to their complex logic not yet fully translated to the generic rule engine.
 		}
+		
+		var encounteredErrors []error
 
 		logger.Info("Applying generic rules...", zap.Int("ruleCount", len(allRules)))
-		modifications, errors := hclFile.ApplyRules(allRules)
-		if len(errors) > 0 {
-			logger.Error("Errors applying generic rules", zap.Errors("errors", errors), zap.String("filePath", filePathVariable))
-			// Decide if we should return error or continue. For now, log and continue.
+		_, genericRuleErrors := hclFile.ApplyRules(allRules)
+		if len(genericRuleErrors) > 0 {
+			encounteredErrors = append(encounteredErrors, genericRuleErrors...)
 		}
-		logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathVariable))
+		// logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathFlag)) // Modifications count might be misleading if errors occurred
 
 		// 3. Apply rules that have complex logic not yet fitting the generic engine.
 		// Apply InitialNodeCount Rule (Complex: Iterates over sub-blocks 'node_pool')
 		logger.Info("Applying InitialNodeCount Rule (custom logic)...")
-		initialNodeCountModifications, err := hclFile.ApplyInitialNodeCountRule()
+		_, err = hclFile.ApplyInitialNodeCountRule()
 		if err != nil {
-			logger.Error("Error applying InitialNodeCount Rule", zap.Error(err), zap.String("filePath", filePathVariable))
-		} else {
-			logger.Info("InitialNodeCount Rule application completed", zap.Int("modifications", initialNodeCountModifications), zap.String("filePath", filePathVariable))
+			encounteredErrors = append(encounteredErrors, fmt.Errorf("InitialNodeCountRule failed: %w", err))
 		}
 
 		// Apply Autopilot Rule (Complex: Conditional logic based on attribute values, multiple different removals)
 		logger.Info("Applying Autopilot Rule (custom logic)...")
-		autopilotModifications, err := hclFile.ApplyAutopilotRule()
+		_, err = hclFile.ApplyAutopilotRule()
 		if err != nil {
-			logger.Error("Error applying Autopilot rule", zap.Error(err), zap.String("filePath", filePathVariable))
-		} else {
-			logger.Info("AutopilotRule application completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathVariable))
+			encounteredErrors = append(encounteredErrors, fmt.Errorf("AutopilotRule failed: %w", err))
 		}
 
 		// 4. Write the modified HCL content back to the file.
-		err = hclFile.WriteToFile(filePathVariable)
+		// This should happen regardless of rule application errors, as some rules might have succeeded.
+		err = hclFile.WriteToFile(filePathFlag)
 		if err != nil {
 			// WriteHCLFile already logs the detailed error.
 			return fmt.Errorf("failed to write modified HCL file: %w", err)
 		}
 
-		logger.Info("Successfully processed and saved HCL file", zap.String("filePath", filePathVariable))
+		// 5. Report any errors encountered during rule processing.
+		if len(encounteredErrors) > 0 {
+			logger.Error("One or more rules encountered errors during processing file.", zap.String("filePath", filePathFlag))
+			for _, ruleErr := range encounteredErrors {
+				logger.Error("Rule application error", zap.Error(ruleErr))
+			}
+			return fmt.Errorf("encountered %d error(s) during rule processing on file %s. See logs for details", len(encounteredErrors), filePathFlag)
+		}
+
+		logger.Info("Successfully processed and saved HCL file", zap.String("filePath", filePathFlag))
 		return nil
 	},
 }
-
-// exprTokensToTypesHelper is no longer needed here as it's in hclmodifier package (if still public, or private there).
 
 func Execute() {
 	// It's good practice to sync the logger before exiting.
