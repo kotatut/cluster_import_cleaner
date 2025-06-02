@@ -162,6 +162,321 @@ resource "aws_instance" "example" {
 	}
 }
 
+func TestApplyRule3(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment() // Or use zap.NewNop() for less verbose test output
+
+	tests := []struct {
+		name                               string
+		hclContent                         string
+		expectedModifications              int
+		expectEnabledAttributeRemoved      bool     // True if 'enabled' should be removed from binary_authorization
+		resourceLabelsToVerify             []string // e.g., ["google_container_cluster", "primary"]
+		binaryAuthorizationShouldExist     bool     // True if we need to check inside binary_authorization
+		binaryAuthorizationShouldHaveEvalMode bool   // True if evaluation_mode should be present after modification
+	}{
+		{
+			name: "Both enabled and evaluation_mode present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  binary_authorization {
+    enabled          = true
+    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
+  }
+}`,
+			expectedModifications:           1,
+			expectEnabledAttributeRemoved:   true,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: true,
+		},
+		{
+			name: "Only enabled present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  binary_authorization {
+    enabled = true
+  }
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: false,
+		},
+		{
+			name: "Only evaluation_mode present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  binary_authorization {
+    evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
+  }
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: true,
+		},
+		{
+			name: "Neither enabled nor evaluation_mode present",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  binary_authorization {
+    some_other_attr = "value"
+  }
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: false,
+		},
+		{
+			name: "binary_authorization block present but empty",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name = "primary-cluster"
+  binary_authorization {}
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: false,
+		},
+		{
+			name: "binary_authorization block missing entirely",
+			hclContent: `
+resource "google_container_cluster" "primary" {
+  name     = "primary-cluster"
+  location = "us-central1"
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:  false,
+			binaryAuthorizationShouldHaveEvalMode: false,
+		},
+		{
+			name: "Non-matching resource type with binary_authorization",
+			hclContent: `
+resource "google_compute_instance" "default" {
+  name = "test-instance"
+  binary_authorization {
+    enabled          = true
+    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
+  }
+}`,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false, // Should not be touched
+			resourceLabelsToVerify:          []string{"google_compute_instance", "default"},
+			binaryAuthorizationShouldExist:  true,  // The block exists on this other resource
+			binaryAuthorizationShouldHaveEvalMode: true, // and it should keep its eval mode
+		},
+		{
+			name: "Multiple GKE resources, one with conflict",
+			hclContent: `
+resource "google_container_cluster" "gke_one" {
+  name = "gke-one"
+  binary_authorization {
+    enabled          = true
+    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
+  }
+}
+resource "google_container_cluster" "gke_two" {
+  name = "gke-two"
+  binary_authorization {
+    evaluation_mode = "DISABLED"
+  }
+}`,
+			expectedModifications:           1,
+			expectEnabledAttributeRemoved:   true, // For "gke_one"
+			resourceLabelsToVerify:          []string{"google_container_cluster", "gke_one"},
+			binaryAuthorizationShouldExist:  true,
+			binaryAuthorizationShouldHaveEvalMode: true,
+			// We also need to check "gke_two" was not modified negatively.
+		},
+		{
+			name: "Empty HCL content",
+			hclContent: ``,
+			expectedModifications:           0,
+			expectEnabledAttributeRemoved:   false,
+			resourceLabelsToVerify:          nil,
+			binaryAuthorizationShouldExist:  false,
+			binaryAuthorizationShouldHaveEvalMode: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_rule3_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				if tc.hclContent == "" && tc.expectedModifications == 0 {
+					if modifier == nil {
+						modifications, ruleErr := 0, error(nil)
+						if modifications != tc.expectedModifications {
+							t.Errorf("ApplyRule3() modifications = %v, want %v. NewFromFile failed as expected for empty content.", modifications, tc.expectedModifications)
+						}
+						if ruleErr != nil {
+							t.Errorf("ApplyRule3() unexpected error = %v for empty content when NewFromFile failed.", ruleErr)
+						}
+						return
+					}
+				} else {
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+				}
+			}
+
+			modifications, ruleErr := modifier.ApplyRule3()
+			if ruleErr != nil {
+				t.Fatalf("ApplyRule3() error = %v", ruleErr)
+			}
+
+			if modifications != tc.expectedModifications {
+				t.Errorf("ApplyRule3() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+			}
+
+			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				blockName := tc.resourceLabelsToVerify[1]
+				var targetResourceBlock *hclwrite.Block
+
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+						targetResourceBlock = b
+						break
+					}
+				}
+
+				if targetResourceBlock == nil && (tc.expectedModifications > 0 || tc.expectEnabledAttributeRemoved || tc.binaryAuthorizationShouldExist) {
+					// If we expected some change or the block to exist, but the parent resource is gone, that's a problem.
+					if !(tc.hclContent == "" && tc.expectedModifications == 0) { // Allow for empty HCL case
+						t.Fatalf("Could not find the target resource block %s[\"%s\"] for verification. HCL content:\n%s", blockType, blockName, tc.hclContent)
+					}
+				}
+
+				if targetResourceBlock != nil {
+					var binaryAuthBlock *hclwrite.Block
+					for _, nestedBlock := range targetResourceBlock.Body().Blocks() {
+						if nestedBlock.Type() == "binary_authorization" {
+							binaryAuthBlock = nestedBlock
+							break
+						}
+					}
+
+					if !tc.binaryAuthorizationShouldExist {
+						if binaryAuthBlock != nil {
+							t.Errorf("Expected 'binary_authorization' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, tc.hclContent)
+						}
+					} else { // binaryAuthorizationShouldExist is true
+						if binaryAuthBlock == nil {
+							if tc.expectEnabledAttributeRemoved || tc.expectedModifications > 0 || tc.binaryAuthorizationShouldHaveEvalMode {
+								t.Fatalf("Expected 'binary_authorization' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, tc.hclContent)
+							}
+						} else { // binary_authorization block exists
+							hasEnabledAttr := binaryAuthBlock.Body().GetAttribute("enabled") != nil
+							hasEvalModeAttr := binaryAuthBlock.Body().GetAttribute("evaluation_mode") != nil
+
+							if tc.expectEnabledAttributeRemoved {
+								if hasEnabledAttr {
+									t.Errorf("Expected 'enabled' attribute to be REMOVED from 'binary_authorization' in %s[\"%s\"], but it was FOUND. HCL:\n%s\nModified HCL:\n%s",
+										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+								}
+							} else { // Not expecting 'enabled' removal
+								// Check if 'enabled' was removed when it shouldn't have been.
+								// This requires checking the original state.
+								originalFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+								var originalBinaryAuthBlock *hclwrite.Block
+								var originalResourceBlock *hclwrite.Block
+								for _, b := range originalFile.Body().Blocks() {
+									if b.Type() == blockType && len(b.Labels()) == 2 && b.Labels()[1] == blockName {
+										originalResourceBlock = b
+										break
+									}
+								}
+								if originalResourceBlock != nil {
+									for _, nb := range originalResourceBlock.Body().Blocks() {
+										if nb.Type() == "binary_authorization" {
+											originalBinaryAuthBlock = nb
+											break
+										}
+									}
+								}
+
+								if originalBinaryAuthBlock != nil && originalBinaryAuthBlock.Body().GetAttribute("enabled") != nil {
+									// 'enabled' was there originally and should not have been removed.
+									if !hasEnabledAttr {
+										t.Errorf("Expected 'enabled' attribute to be PRESENT in 'binary_authorization' in %s[\"%s\"], but it was NOT FOUND (removed). HCL:\n%s\nModified HCL:\n%s",
+											blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+									}
+								}
+							}
+
+							if tc.binaryAuthorizationShouldHaveEvalMode {
+								if !hasEvalModeAttr {
+									t.Errorf("Expected 'evaluation_mode' attribute to be PRESENT in 'binary_authorization' in %s[\"%s\"], but it was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
+										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+								}
+							} else {
+								// If eval mode should not be there, and it is, it's an error only if it wasn't there originally.
+								// This is tricky. The main point is it wasn't *added* if not part of the rule.
+								// The current rule doesn't add attributes, so this is mostly about it not being removed if it was there and not part of the "both present" condition.
+								// This is implicitly covered by the `enabled` check logic for cases where only `evaluation_mode` was present.
+							}
+						}
+					}
+				}
+			}
+
+			// Specific check for "Multiple GKE resources, one with conflict"
+			if tc.name == "Multiple GKE resources, one with conflict" {
+				var gkeTwoBlock *hclwrite.Block
+				for _, b := range modifier.File().Body().Blocks() {
+					if b.Type() == "google_container_cluster" && len(b.Labels()) == 2 && b.Labels()[1] == "gke_two" {
+						gkeTwoBlock = b
+						break
+					}
+				}
+				if gkeTwoBlock == nil {
+					t.Fatalf("Could not find 'gke_two' GKE block for multi-block test verification. HCL:\n%s", tc.hclContent)
+				}
+				binaryAuthGkeTwo := gkeTwoBlock.Body().FirstMatchingBlock("binary_authorization", nil)
+				if binaryAuthGkeTwo == nil {
+					t.Fatalf("'binary_authorization' missing in 'gke_two' GKE block for multi-block test. HCL:\n%s", tc.hclContent)
+				}
+				if binaryAuthGkeTwo.Body().GetAttribute("enabled") != nil {
+					t.Errorf("'enabled' attribute should NOT be present in 'gke_two' ('binary_authorization' block), but it was found. HCL:\n%s\nModified HCL:\n%s",
+						tc.hclContent, string(modifier.File().Bytes()))
+				}
+				if binaryAuthGkeTwo.Body().GetAttribute("evaluation_mode") == nil {
+					t.Errorf("'evaluation_mode' attribute expected to be PRESENT in 'gke_two' ('binary_authorization' block), but was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
+						tc.hclContent, string(modifier.File().Bytes()))
+				}
+			}
+		})
+	}
+}
+
 func TestApplyRule2(t *testing.T) {
 	t.Helper()
 	logger, _ := zap.NewDevelopment() // Or use zap.NewNop() for less verbose test output

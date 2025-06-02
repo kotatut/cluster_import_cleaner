@@ -449,3 +449,74 @@ func (m *Modifier) ApplyRule2() (modifications int, err error) {
 	m.logger.Info("ApplyRule2 finished", zap.Int("modifications", modificationCount))
 	return modificationCount, nil
 }
+
+// ApplyRule3 implements the logic for Rule 3:
+// 1. Iterate through all blocks in the HCL file.
+// 2. Identify `resource` blocks with type `google_container_cluster`.
+// 3. For each such block:
+//    a. Check for a nested block named `binary_authorization`.
+//    b. If the `binary_authorization` block exists:
+//        i. Check for an attribute named `enabled` within this nested block.
+//        ii. Check for an attribute named `evaluation_mode` within this nested block.
+//        iii. If both `enabled` and `evaluation_mode` attributes are found, remove the `enabled` attribute from the `binary_authorization` block.
+//        iv. Increment a counter for each modification.
+// 4. Log information about the process (e.g., "Starting ApplyRule3", "Found 'binary_authorization' block", "Removed 'enabled' attribute").
+// 5. Return the total count of modifications and any error, similar to `ApplyRule1` and `ApplyRule2`.
+func (m *Modifier) ApplyRule3() (modifications int, err error) {
+	m.logger.Info("Starting ApplyRule3")
+	modificationCount := 0
+
+	if m.file == nil || m.file.Body() == nil {
+		m.logger.Error("ApplyRule3 called on a Modifier with nil file or file body.")
+		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
+	}
+
+	for _, block := range m.file.Body().Blocks() {
+		// Rule 2: Identify `resource` blocks with type `google_container_cluster`.
+		if block.Type() == "resource" && len(block.Labels()) == 2 && block.Labels()[0] == "google_container_cluster" {
+			resourceName := block.Labels()[1]
+			m.logger.Debug("Checking 'google_container_cluster' resource for Rule 3", zap.String("name", resourceName))
+
+			// Rule 3a: Check for a nested block named `binary_authorization`.
+			var binaryAuthorizationBlock *hclwrite.Block
+			for _, nestedBlock := range block.Body().Blocks() {
+				if nestedBlock.Type() == "binary_authorization" {
+					binaryAuthorizationBlock = nestedBlock
+					m.logger.Debug("Found 'binary_authorization' block for Rule 3", zap.String("resourceName", resourceName))
+					break
+				}
+			}
+
+			// Rule 3b: If the `binary_authorization` block exists.
+			if binaryAuthorizationBlock != nil {
+				// Rule 3b.i: Check for an attribute named `enabled` within this nested block.
+				enabledAttribute := binaryAuthorizationBlock.Body().GetAttribute("enabled")
+				// Rule 3b.ii: Check for an attribute named `evaluation_mode` within this nested block.
+				evaluationModeAttribute := binaryAuthorizationBlock.Body().GetAttribute("evaluation_mode")
+
+				// Rule 3b.iii: If both `enabled` and `evaluation_mode` attributes are found, remove the `enabled` attribute.
+				if enabledAttribute != nil && evaluationModeAttribute != nil {
+					m.logger.Info("Found 'enabled' and 'evaluation_mode' attributes in 'binary_authorization' block",
+						zap.String("resourceName", resourceName),
+						zap.String("attributeToRemove", "enabled"))
+
+					binaryAuthorizationBlock.Body().RemoveAttribute("enabled")
+					modificationCount++ // Rule 3b.iv: Increment counter
+					m.logger.Info("Removed 'enabled' attribute from 'binary_authorization' block", zap.String("resourceName", resourceName))
+				} else {
+					if enabledAttribute == nil {
+						m.logger.Debug("Attribute 'enabled' not found in 'binary_authorization' block", zap.String("resourceName", resourceName))
+					}
+					if evaluationModeAttribute == nil {
+						m.logger.Debug("Attribute 'evaluation_mode' not found in 'binary_authorization' block", zap.String("resourceName", resourceName))
+					}
+				}
+			} else {
+				m.logger.Debug("'binary_authorization' block not found for Rule 3", zap.String("resourceName", resourceName))
+			}
+		}
+	}
+
+	m.logger.Info("ApplyRule3 finished", zap.Int("modifications", modificationCount))
+	return modificationCount, nil
+}

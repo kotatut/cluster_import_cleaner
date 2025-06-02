@@ -71,6 +71,17 @@ var rootCmd = &cobra.Command{
 			logger.Info("Rule 2 application completed", zap.Int("modifications", rule2Modifications), zap.String("filePath", filePathVariable))
 		}
 
+		// Apply Rule 3
+		logger.Info("Applying Rule 3...")
+		rule3Modifications, err := hclFile.ApplyRule3()
+		if err != nil {
+			// ApplyRule3 already logs the detailed error.
+			logger.Error("Error applying Rule 3", zap.Error(err), zap.String("filePath", filePathVariable))
+			// For now, let's log the error and continue
+		} else {
+			logger.Info("Rule 3 application completed", zap.Int("modifications", rule3Modifications), zap.String("filePath", filePathVariable))
+		}
+
 		// 4. Write the modified HCL content back to the file using the hclmodifier package.
 		err = hclFile.WriteToFile(filePathVariable)
 		if err != nil {
