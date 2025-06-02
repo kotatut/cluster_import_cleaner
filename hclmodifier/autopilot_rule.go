@@ -1,43 +1,47 @@
-package rules
+package hclmodifier
 
 import (
 	"fmt"
 
-	"github.com/GoogleCloudPlatform/hcl-modifier/pkg/hclmodifier"
 	"github.com/hashicorp/hcl/v2/hclwrite" // Required for hclwrite.Block type hint if used
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
+	// "github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // No longer needed for local Rule type
 )
 
-// AutopilotRuleDefinition is a placeholder for the AutopilotRule.
-// The current ApplyRules engine may not fully support its complex logic (conditional attribute value checks, multiple different removals).
-// Thus, ApplyAutopilotRule will continue to use its direct implementation.
-var AutopilotRuleDefinition = hclmodifier.Rule{
-	Name:               "AutopilotRule: Placeholder - Complex logic handled by ApplyAutopilotRule",
+// AutopilotRuleDefinition is a placeholder for the AutopilotRule because its complex logic,
+// involving conditional checks and removal of various attributes and blocks,
+// is handled by the direct implementation in ApplyAutopilotRule.
+// This definition is not meant to be used by the generic ApplyRules engine.
+//
+// What it does (effectively via ApplyAutopilotRule): If `enable_autopilot` is true, it removes many attributes
+// and blocks that are incompatible or managed by Autopilot (e.g., `node_pool` blocks, `cluster_ipv4_cidr`,
+// certain `addons_config` sub-blocks, `cluster_autoscaling.enabled`, etc.). If `enable_autopilot` is explicitly
+// set to false or is not a boolean, it removes the `enable_autopilot` attribute itself to clean up potentially
+// invalid or confusing states from an import.
+//
+// Why it's necessary for GKE imports: When importing a standard GKE cluster and then trying to convert it to
+// Autopilot by setting `enable_autopilot = true`, or when importing an existing Autopilot cluster, many
+// attributes valid for standard clusters become invalid or are managed by Autopilot. Terraform might produce
+// errors if these attributes are left in the configuration. This rule (via its direct function) cleans these up.
+// If an imported cluster has `enable_autopilot = false` or an invalid value for it, removing the attribute
+// helps avoid potential errors if the user intends to manage it as a standard cluster or correct the attribute.
+var AutopilotRuleDefinition = Rule{ // Use local Rule type
+	Name:               "Autopilot Configuration Cleanup Rule (handled by ApplyAutopilotRule)",
 	TargetResourceType: "google_container_cluster",
+	// Conditions and Actions are omitted as this rule is not processed by the generic engine.
 }
 
-// ApplyAutopilotRule implements the logic for applying Autopilot configurations.
-// 1. Iterate through all blocks in the HCL file.
-// 2. Identify `resource` blocks with type `google_container_cluster`.
-// 3. For each such block:
-//    a. Check for the `enable_autopilot` attribute.
-//    b. If the attribute exists:
-//        i. Get its value.
-//        ii. If the value is `true`:
-//            - Log the action.
-//            - Define a list of attributes to remove.
-//            - Remove these attributes from the block.
-//            - Define a list of nested blocks to remove.
-//            - Remove these nested blocks.
-//            - Specifically handle `cluster_autoscaling` block.
-//            - Specifically handle `binary_authorization` block.
-//        iii. If the value is `false`:
-//            - Log the action.
-//            - Remove the `enable_autopilot` attribute itself.
-//    c. If the `enable_autopilot` attribute is not found, log this.
-// 4. Return the total count of modifications and any error encountered.
-func (m *hclmodifier.Modifier) ApplyAutopilotRule() (modifications int, err error) {
+// ApplyAutopilotRule cleans a `google_container_cluster` resource configuration based on the `enable_autopilot` attribute.
+// If `enable_autopilot = true`, it removes attributes and blocks that are incompatible with Autopilot mode.
+// This includes node pools, certain network settings, and specific autoscaling/binary authorization fields.
+// If `enable_autopilot = false` or is not a boolean value (which can happen after import if the
+// attribute was manually edited or if the source was not a pure Autopilot cluster), this function
+// removes the `enable_autopilot` attribute itself to prevent errors, allowing the cluster to be
+// treated as a standard cluster or requiring the user to explicitly set `enable_autopilot = true`.
+//
+// This function is called directly and does not use the generic Rule engine due to its complex conditional logic.
+func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 	modificationCount := 0
 	var firstError error
 
