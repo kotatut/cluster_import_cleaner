@@ -18,8 +18,8 @@ import (
 // Modifier encapsulates an HCL file that can be programmatically modified.
 // It holds the parsed HCL file representation and a logger for operational insights.
 type Modifier struct {
-	file   *hclwrite.File   // The in-memory representation of the HCL file.
-	Logger *zap.Logger      // Logger for logging activities within the modifier.
+	file   *hclwrite.File // The in-memory representation of the HCL file.
+	Logger *zap.Logger    // Logger for logging activities within the modifier.
 }
 
 // NewFromFile creates a new Modifier instance by reading and parsing an HCL file
@@ -547,6 +547,12 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 					_, err := m.GetNestedBlock(block.Body(), condition.Path)
 					if err != nil {
 						condLogger.Debug("Condition BlockExists not met.", zap.Error(err))
+						conditionsMet = false
+					}
+				case types.NullValue: // Use types.ConditionType
+					val, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
+					if err != nil || !val.IsNull() {
+						condLogger.Debug("Condition NullValue not met.", zap.Error(err))
 						conditionsMet = false
 					}
 				case types.AttributeValueEquals: // Use types.ConditionType

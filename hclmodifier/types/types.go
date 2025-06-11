@@ -12,6 +12,7 @@ const (
 	AttributeDoesntExists ConditionType = "AttributeDoesntExists" // AttributeDoesntExists checks if a specific attribute is not present at the given path.
 	BlockExists           ConditionType = "BlockExists"           // BlockExists checks if a specific block exists at the given path.
 	AttributeValueEquals  ConditionType = "AttributeValueEquals"  // AttributeValueEquals checks if a specific attribute at the given path has a certain value.
+	NullValue             ConditionType = "NullValue"             // NullValue verifies that value is "null"
 )
 
 // ActionType is an enumeration defining the types of actions that can be performed by a Rule.

@@ -66,8 +66,8 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 		"stateful_ha_config",
 	}
 	clusterAutoscalingAttributesToRemoveWhenTrue := []string{"enabled"}
-	// "resource_limits" is a block within cluster_autoscaling
-	clusterAutoscalingSubBlocksToRemoveWhenTrue := []string{"resource_limits"}
+	// "resource_limits" is a block within cluster_autoscaling and could be repeated 3 times
+	clusterAutoscalingSubBlocksToRemoveWhenTrue := []string{"resource_limits", "resource_limits", "resource_limits"}
 
 	binaryAuthorizationAttributesToRemoveWhenTrue := []string{"enabled"}
 
@@ -115,7 +115,7 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						resLogger.Info("Successfully removed 'enable_autopilot' (false) attribute.")
 					}
 				}
-				continue 
+				continue
 			}
 
 			if isAutopilotTrue {
@@ -203,7 +203,7 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 							}
 						}
 					}
-				} else if errGetAddons != nil && len(addonsConfigSubBlocksToRemoveWhenTrue) > 0 { 
+				} else if errGetAddons != nil && len(addonsConfigSubBlocksToRemoveWhenTrue) > 0 {
 					resLogger.Debug("'addons_config' block not found, skipping removal of its sub-blocks.", zap.Error(errGetAddons))
 				}
 
@@ -214,7 +214,9 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						if _, existingAttr, _ := m.GetAttributeValueByPath(caBlock.Body(), []string{attrName}); existingAttr != nil {
 							if errRemove := m.RemoveAttributeByPath(caBlock.Body(), []string{attrName}); errRemove != nil {
 								resLogger.Error("Error removing attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName), zap.Error(errRemove))
-								if firstError == nil {	firstError = errRemove }
+								if firstError == nil {
+									firstError = errRemove
+								}
 							} else {
 								modificationCount++
 								resLogger.Info("Removed attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName))
@@ -225,7 +227,9 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						if existingSubBlock, _ := m.GetNestedBlock(caBlock.Body(), []string{subBlockName}); existingSubBlock != nil {
 							if errRemove := m.RemoveNestedBlockByPath(caBlock.Body(), []string{subBlockName}); errRemove != nil {
 								resLogger.Error("Error removing sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
-								if firstError == nil { firstError = errRemove }
+								if firstError == nil {
+									firstError = errRemove
+								}
 							} else {
 								modificationCount++
 								resLogger.Info("Removed sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName))
@@ -243,7 +247,9 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						if _, existingAttr, _ := m.GetAttributeValueByPath(baBlock.Body(), []string{attrName}); existingAttr != nil {
 							if errRemove := m.RemoveAttributeByPath(baBlock.Body(), []string{attrName}); errRemove != nil {
 								resLogger.Error("Error removing attribute from 'binary_authorization'.", zap.String("attributeName", attrName), zap.Error(errRemove))
-								if firstError == nil { firstError = errRemove }
+								if firstError == nil {
+									firstError = errRemove
+								}
 							} else {
 								modificationCount++
 								resLogger.Info("Removed attribute from 'binary_authorization'.", zap.String("attributeName", attrName))

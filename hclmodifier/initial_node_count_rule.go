@@ -41,7 +41,7 @@ func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
 	var firstError error
 	m.Logger.Info("Starting ApplyInitialNodeCountRule (using path-based helpers).")
 
-	if m.File() == nil || m.File().Body() == nil { 
+	if m.File() == nil || m.File().Body() == nil {
 		m.Logger.Error("ApplyInitialNodeCountRule: Modifier's file or file body is nil.")
 		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
 	}
@@ -54,7 +54,7 @@ func (m *Modifier) ApplyInitialNodeCountRule() (modifications int, err error) {
 
 			for _, nodePoolBlock := range block.Body().Blocks() {
 				if nodePoolBlock.Type() == "node_pool" {
-					nodePoolLogger := clusterLogger.With(zap.String("nodePoolType", nodePoolBlock.Type())) 
+					nodePoolLogger := clusterLogger.With(zap.String("nodePoolType", nodePoolBlock.Type()))
 					nodePoolLogger.Debug("Checking 'node_pool' block.")
 
 					// Check if 'initial_node_count' exists in this node_pool block.

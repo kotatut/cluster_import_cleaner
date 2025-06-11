@@ -42,6 +42,27 @@ var RuleRemoveLoggingService = types.Rule{
 	},
 }
 
+var RuleRemoveLoggingService2 = types.Rule{
+	Name:               "Logging Service Rule 2: Remove logging_service if logging_config block exists",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []types.RuleCondition{
+		{
+			Type: types.AttributeExists,
+			Path: []string{"logging_service"},
+		},
+		{
+			Type: types.BlockExists,
+			Path: []string{"logging_config"},
+		},
+	},
+	Actions: []types.RuleAction{
+		{
+			Type: types.RemoveAttribute,
+			Path: []string{"logging_service"},
+		},
+	},
+}
+
 // RuleRemoveMonitoringService defines a rule for managing the `monitoring_service` attribute in `google_container_cluster`
 // resources, especially when the `monitoring_config` block is present.
 //

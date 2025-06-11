@@ -39,5 +39,9 @@ var ClusterIPV4CIDRRuleDefinition = types.Rule{
 			Type: types.RemoveAttribute,
 			Path: []string{"cluster_ipv4_cidr"},
 		},
+		{
+			Type: types.RemoveAttribute,
+			Path: []string{"ip_allocation_policy", "cluster_ipv4_cidr_block"},
+		},
 	},
 }

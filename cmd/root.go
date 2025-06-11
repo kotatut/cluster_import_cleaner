@@ -66,8 +66,12 @@ or older templates. The tool modifies the file in-place.`,
 			rules.ServicesIPV4CIDRRuleDefinition,
 			rules.BinaryAuthorizationRuleDefinition,
 			rules.RuleRemoveLoggingService,
+			rules.RuleRemoveLoggingService2,
 			rules.RuleRemoveMonitoringService,
 			rules.SetMinVersionRuleDefinition,
+			rules.HpaProfileRuleDefinition,
+			rules.DiskSizeRuleDefinition,
+			rules.OsVersionRuleDefinition,
 			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
 			// due to their complex logic not yet fully translated to the generic rule engine.
 		}
