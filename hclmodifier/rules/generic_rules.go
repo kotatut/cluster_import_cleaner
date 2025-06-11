@@ -94,3 +94,29 @@ var RuleRemoveMonitoringService = types.Rule{
 		},
 	},
 }
+
+// RuleHandleAutopilotFalse defines a rule for handling the `enable_autopilot = false` case.
+//
+// What it does: It checks if a `google_container_cluster` resource has `enable_autopilot`
+// set to `false`. If so, it removes the `enable_autopilot` attribute.
+//
+// Why it's necessary: `enable_autopilot = false` is equivalent to the attribute not being
+// present, as standard GKE clusters are the default. Removing this explicit `false`
+// cleans up the configuration and reduces redundancy.
+var RuleHandleAutopilotFalse = types.Rule{
+	Name:               "Autopilot Rule: Remove enable_autopilot if false",
+	TargetResourceType: "google_container_cluster",
+	Conditions: []types.RuleCondition{
+		{
+			Type:          types.AttributeValueEquals,
+			Path:          []string{"enable_autopilot"},
+			ExpectedValue: "false",
+		},
+	},
+	Actions: []types.RuleAction{
+		{
+			Type: types.RemoveAttribute,
+			Path: []string{"enable_autopilot"},
+		},
+	},
+}

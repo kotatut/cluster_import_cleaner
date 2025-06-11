@@ -19,7 +19,7 @@ func main() {
 	// For this exercise, we'll assume cmd.InitializeLogger() sets up a logger that can be fetched,
 	// or we directly try to use a logger from cmd if it's exported.
 	// If cmd.Logger is not directly accessible, this part needs adjustment.
-	// As per current cmd/root.go, logger is a package-level var, not easily accessible here without modification.
+	// Get the logger instance from the cmd package.
 	// So, we'll initialize a temporary one here for panic recovery if cmd.Logger isn't available.
 
 	defer func() {

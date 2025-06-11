@@ -57,6 +57,16 @@ type RuleAction struct {
 	PathToSet []string
 }
 
+// RuleExecutionType defines how a rule should be executed.
+type RuleExecutionType string
+
+const (
+	// RuleExecutionNormal indicates that the rule is applied to the main resource block.
+	RuleExecutionNormal RuleExecutionType = "Normal"
+	// RuleExecutionForEachNestedBlock indicates that the rule is applied to each instance of a specified nested block type.
+	RuleExecutionForEachNestedBlock RuleExecutionType = "ForEachNestedBlock"
+)
+
 // Rule defines a single, named modification operation to be conditionally applied to HCL resources.
 // It consists of a target resource type, optional labels for more specific targeting, a set of
 // conditions that must all be met, and a set of actions to perform if the conditions are true.
@@ -70,4 +80,9 @@ type Rule struct {
 	TargetResourceLabels []string
 	Conditions           []RuleCondition // Conditions is a list of conditions that must ALL be true (AND logic) for the actions to be performed.
 	Actions              []RuleAction    // Actions is a list of actions to be performed if all conditions are met.
+	// ExecutionType specifies how the rule should be executed. Defaults to "Normal" if empty.
+	ExecutionType RuleExecutionType
+	// NestedBlockTargetType is used when ExecutionType is "ForEachNestedBlock". It specifies the type of nested block
+	// to iterate over (e.g., "node_pool"). Conditions and Actions are then relative to each instance of this nested block.
+	NestedBlockTargetType string
 }

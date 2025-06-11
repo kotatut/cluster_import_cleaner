@@ -72,8 +72,10 @@ or older templates. The tool modifies the file in-place.`,
 			rules.HpaProfileRuleDefinition,
 			rules.DiskSizeRuleDefinition,
 			rules.OsVersionRuleDefinition,
-			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
-			// due to their complex logic not yet fully translated to the generic rule engine.
+			rules.RuleHandleAutopilotFalse, // Added new generic rule for enable_autopilot=false
+			// Note: InitialNodeCountRule is now part of the generic engine.
+			// AutopilotRule (for enable_autopilot=true and non-boolean cases) is handled separately below
+			// due to its more complex conditional attribute/block removals.
 		}
 
 		var encounteredErrors []error
@@ -85,16 +87,9 @@ or older templates. The tool modifies the file in-place.`,
 		}
 		// logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathFlag)) // Modifications count might be misleading if errors occurred
 
-		// 3. Apply rules that have complex logic not yet fitting the generic engine.
-		// Apply InitialNodeCount Rule (Complex: Iterates over sub-blocks 'node_pool')
-		logger.Info("Applying InitialNodeCount Rule (custom logic)...")
-		_, err = hclFile.ApplyInitialNodeCountRule()
-		if err != nil {
-			encounteredErrors = append(encounteredErrors, fmt.Errorf("InitialNodeCountRule failed: %w", err))
-		}
-
-		// Apply Autopilot Rule (Complex: Conditional logic based on attribute values, multiple different removals)
-		logger.Info("Applying Autopilot Rule (custom logic)...")
+		// 3. Apply custom rules with logic not yet fully fitting the generic engine.
+		// Apply Autopilot Rule (custom logic for enable_autopilot=true and non-boolean enable_autopilot)
+		logger.Info("Applying Autopilot Rule (custom logic for specific cases)...")
 		_, err = hclFile.ApplyAutopilotRule()
 		if err != nil {
 			encounteredErrors = append(encounteredErrors, fmt.Errorf("AutopilotRule failed: %w", err))
