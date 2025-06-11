@@ -173,5 +173,6 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
     enabled = "false"
   }
 
-  subnetwork = "projects/terrakot/regions/us-central1/subnetworks/default"
+  subnetwork         = "projects/terrakot/regions/us-central1/subnetworks/default"
+  min_master_version = "1.31.4-gke.1372000"
 }

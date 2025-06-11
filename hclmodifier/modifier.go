@@ -19,9 +19,10 @@ import (
 type ConditionType string
 
 const (
-	AttributeExists      ConditionType = "AttributeExists"      // AttributeExists checks if a specific attribute exists at the given path.
-	BlockExists          ConditionType = "BlockExists"          // BlockExists checks if a specific block exists at the given path.
-	AttributeValueEquals ConditionType = "AttributeValueEquals" // AttributeValueEquals checks if a specific attribute at the given path has a certain value.
+	AttributeExists       ConditionType = "AttributeExists"       // AttributeExists checks if a specific attribute exists at the given path.
+	AttributeDoesntExists ConditionType = "AttributeDoesntExists" // AttributeDoesntExists checks if a specific attribute is not present at the given path.
+	BlockExists           ConditionType = "BlockExists"           // BlockExists checks if a specific block exists at the given path.
+	AttributeValueEquals  ConditionType = "AttributeValueEquals"  // AttributeValueEquals checks if a specific attribute at the given path has a certain value.
 )
 
 // ActionType is an enumeration defining the types of actions that can be performed by a Rule.
@@ -59,12 +60,11 @@ type RuleAction struct {
 	// Example for a nested attribute: `["block_name", "nested_block_name", "attribute_name"]`
 	// Example for removing a block: `["block_name", "nested_block_name"]`
 	Path []string
-	// Value is the cty.Value to be set for the SetAttributeValue action type.
-	// This is typically populated internally after parsing ValueToSet.
-	Value cty.Value
 	// ValueToSet is the string representation of the value to set for SetAttributeValue.
 	// This string will be parsed into a cty.Value before the attribute is set.
 	ValueToSet string
+	// PathToSet is a slice of strings representing the hierarchical path to the attribute to set as Value.
+	PathToSet []string
 }
 
 // Rule defines a single, named modification operation to be conditionally applied to HCL resources.
@@ -604,6 +604,12 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 						condLogger.Debug("Condition AttributeExists not met.", zap.Error(err))
 						conditionsMet = false
 					}
+				case AttributeDoesntExists: // Use local ConditionType
+					_, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
+					if err == nil {
+						condLogger.Debug("Condition AttributeDoesntExists not met.", zap.Error(err))
+						conditionsMet = false
+					}
 				case BlockExists: // Use local ConditionType
 					_, err := m.GetNestedBlock(block.Body(), condition.Path)
 					if err != nil {
@@ -699,7 +705,14 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 						}
 					case SetAttributeValue: // Use local ActionType
 						var valueToSet cty.Value
-						if bVal, err := strconv.ParseBool(action.ValueToSet); err == nil {
+						if len(action.PathToSet) != 0 {
+							valueByPath, _, err := m.GetAttributeValueByPath(block.Body(), action.PathToSet)
+							if err != nil {
+								actLogger.Error("Error while getting attitube by path.", zap.Error(err))
+							} else {
+								valueToSet = valueByPath
+							}
+						} else if bVal, err := strconv.ParseBool(action.ValueToSet); err == nil {
 							valueToSet = cty.BoolVal(bVal)
 						} else if iVal, err := strconv.ParseInt(action.ValueToSet, 10, 64); err == nil {
 							valueToSet = cty.NumberIntVal(iVal)

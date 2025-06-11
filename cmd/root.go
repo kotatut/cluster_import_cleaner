@@ -3,15 +3,17 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var logger *zap.Logger
+
 // filePathFlag stores the path to the HCL file to be modified, provided via the --file flag.
-var filePathFlag string 
+var filePathFlag string
 
 func init() {
 	var err error
@@ -37,9 +39,9 @@ func init() {
 // and save the modified file. The primary GKE-specific logic is encapsulated
 // within the hclmodifier package and its rules.
 var rootCmd = &cobra.Command{
-	Use:   "gke-tf-cleaner", 
+	Use:   "gke-tf-cleaner",
 	Short: "A CLI tool to clean and modify Terraform HCL files for GKE clusters.",
-	Long:  `gke-tf-cleaner is a command-line utility that processes a given Terraform HCL file.
+	Long: `gke-tf-cleaner is a command-line utility that processes a given Terraform HCL file.
 It applies a predefined set of rules to clean up common issues found in configurations
 for Google Kubernetes Engine (GKE) clusters, especially those generated from Terraform imports
 or older templates. The tool modifies the file in-place.`,
@@ -65,10 +67,11 @@ or older templates. The tool modifies the file in-place.`,
 			rules.RuleRemoveLoggingService,
 			rules.RuleRemoveMonitoringService,
 			rules.RuleRemoveNodeVersion,
+			rules.SetMinVersionRuleDefinition,
 			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
 			// due to their complex logic not yet fully translated to the generic rule engine.
 		}
-		
+
 		var encounteredErrors []error
 
 		logger.Info("Applying generic rules...", zap.Int("ruleCount", len(allRules)))
@@ -130,9 +133,9 @@ func Execute() {
 		// Errors from RunE should already be logged with context.
 		// Cobra prints the error to os.Stderr by default.
 		// We log a final message here before exiting with a non-zero status.
-	// Changed logger.Fatal to logger.Error and added explicit os.Exit(1)
-	logger.Error("Command execution failed", zap.Error(err))
-	os.Exit(1)
+		// Changed logger.Fatal to logger.Error and added explicit os.Exit(1)
+		logger.Error("Command execution failed", zap.Error(err))
+		os.Exit(1)
 	}
 }
 
