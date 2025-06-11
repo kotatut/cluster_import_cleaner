@@ -5,55 +5,50 @@ import (
 	"os"
 
 	"github.com/kotatut/cluster_import_cleaner/cmd"
-	"go.uber.org/zap" // Import zap for potential use in panic recovery
+	"go.uber.org/zap"
 )
 
-// Attempt to get the logger from the cmd package.
-// This is a bit of a hack, as ideally, the logger would be passed around or accessible globally in a cleaner way.
-// For panic recovery, direct access might be necessary if the panic occurs before logger is fully set up in Execute.
-var globalLogger *zap.Logger
-
+// main is the entry point of the application.
+// It sets up a deferred panic recovery function and then executes the root command
+// provided by the cmd package.
 func main() {
-	// Initialize globalLogger, trying to fetch from cmd.
-	// This relies on cmd.GetLogger() or similar being available, or direct access if possible.
-	// For this exercise, we'll assume cmd.InitializeLogger() sets up a logger that can be fetched,
-	// or we directly try to use a logger from cmd if it's exported.
-	// If cmd.Logger is not directly accessible, this part needs adjustment.
-	// As per current cmd/root.go, logger is a package-level var, not easily accessible here without modification.
-	// So, we'll initialize a temporary one here for panic recovery if cmd.Logger isn't available.
-
+	// Deferred function to recover from panics, log the error, and exit.
 	defer func() {
 		if r := recover(); r != nil {
-			// Try to use the logger from cmd if it was initialized.
-			// This is a simplification; a more robust solution would involve a global logger instance.
-			// For now, we'll try to get it via a hypothetical GetLogger or use a default.
-			currentLogger := cmd.GetCmdLogger() // Assuming GetCmdLogger() is added to cmd/root.go
+			// Attempt to get the logger instance from the cmd package.
+			// This logger is initialized within the cmd package (typically in root.go).
+			currentLogger := cmd.GetCmdLogger()
+
 			if currentLogger == nil {
-				// Fallback if cmd's logger isn't available or not yet initialized
-				fmt.Fprintf(os.Stderr, "Panic recovery: Logger not available. Panic: %v\n", r)
-				// Attempt to create a simple logger for this panic message
-				simpleLogger, _ := zap.NewDevelopment()
-				if simpleLogger != nil {
-					simpleLogger.Error("Recovered from panic",
+				// Fallback to standard error output if the logger from cmd is not available
+				// (e.g., panic occurred before logger initialization).
+				// A simple zap logger is also created here as a last resort for structured logging of the panic.
+				fmt.Fprintf(os.Stderr, "Panic recovery: Logger from cmd package not available. Panic: %v\n", r)
+
+				simpleLogger, err := zap.NewDevelopment()
+				if err == nil && simpleLogger != nil {
+					simpleLogger.Error("Recovered from panic (fallback logger)",
 						zap.String("panic_info", fmt.Sprintf("%v", r)),
-						zap.Stack("stacktrace"),
+						zap.Stack("stacktrace"), // Captures stack trace of the goroutine that panicked.
 					)
 					_ = simpleLogger.Sync()
 				} else {
+					// If even the simple logger fails, just print basic info.
 					fmt.Fprintf(os.Stderr, "Recovered from panic: %v\nStack trace will be printed by Go runtime if not already.\n", r)
 				}
 			} else {
+				// If the logger from cmd is available, use it to log the panic.
 				currentLogger.Error("Recovered from panic",
 					zap.String("panic_info", fmt.Sprintf("%v", r)),
-					zap.Stack("stacktrace"), // zap.Stack automatically captures the stack trace for panics
+					zap.Stack("stacktrace"), // zap.Stack captures the stack trace.
 				)
-				_ = currentLogger.Sync() // Attempt to sync the main logger
+				_ = currentLogger.Sync() // Attempt to sync the logger from cmd.
 			}
-			os.Exit(1)
+			os.Exit(1) // Exit with a non-zero status code after logging the panic.
 		}
 	}()
 
-	// It's good practice to initialize and pass the logger from main.
-	// For now, cmd.Execute() initializes its own logger.
+	// Execute the root command. The logger used by the application is initialized
+	// within the cmd package (typically in cmd/root.go's init function).
 	cmd.Execute()
 }

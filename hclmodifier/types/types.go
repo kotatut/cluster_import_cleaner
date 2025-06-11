@@ -24,6 +24,16 @@ const (
 	SetAttributeValue ActionType = "SetAttributeValue" // SetAttributeValue sets a specific attribute at the given path to a certain value.
 )
 
+// RuleExecutionType defines how a rule should be executed.
+type RuleExecutionType string
+
+const (
+	// RuleExecutionStandard indicates that the rule is applied to the resource block itself.
+	RuleExecutionStandard RuleExecutionType = "Standard"
+	// RuleExecutionForEachNestedBlock indicates that the rule is applied to each nested block of a specific type within the resource block.
+	RuleExecutionForEachNestedBlock RuleExecutionType = "ForEachNestedBlock"
+)
+
 // RuleCondition defines a specific condition that must be met for a Rule's actions to be triggered.
 // It specifies the type of check, the path to the HCL element, and an optional expected value.
 type RuleCondition struct {
@@ -70,4 +80,12 @@ type Rule struct {
 	TargetResourceLabels []string
 	Conditions           []RuleCondition // Conditions is a list of conditions that must ALL be true (AND logic) for the actions to be performed.
 	Actions              []RuleAction    // Actions is a list of actions to be performed if all conditions are met.
+	// ExecutionType specifies how the rule is executed. Defaults to RuleExecutionStandard.
+	ExecutionType RuleExecutionType
+	// NestedBlockTargetType is relevant when ExecutionType is RuleExecutionForEachNestedBlock.
+	// It specifies the type of nested block to target (e.g., "node_pool").
+	NestedBlockTargetType string
+	// NestedBlockTargetLabels provide optional label criteria for the nested block.
+	// If empty, the rule applies to all nested blocks of NestedBlockTargetType.
+	NestedBlockTargetLabels []string
 }
