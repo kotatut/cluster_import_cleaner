@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"go.uber.org/zap"
-	// "github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // No longer needed for local Rule type
+
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
 )
 
 // InitialNodeCountRuleDefinition is a placeholder for the InitialNodeCountRule because its logic,
@@ -22,7 +23,7 @@ import (
 // or it might attempt to resize the node pool on apply if `node_count` is not set.
 // Removing `initial_node_count` defers to `node_count` or autoscaling for managing the number of nodes,
 // which is generally the desired state for imported and ongoing management.
-var InitialNodeCountRuleDefinition = Rule{ // Use local Rule type
+var InitialNodeCountRuleDefinition = types.Rule{ // Use types.Rule
 	Name:               "Initial Node Count Rule: Remove initial_node_count from node_pools (handled by ApplyInitialNodeCountRule)",
 	TargetResourceType: "google_container_cluster",
 	// Conditions and Actions are omitted as this rule is not processed by the generic engine.

@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // ServicesIPV4CIDRRuleDefinition defines a rule for handling conflicts within the `ip_allocation_policy` block
@@ -17,26 +17,26 @@ import (
 // managed by GKE or defined elsewhere. Defining the CIDR block directly via `services_ipv4_cidr_block` can
 // conflict with the named secondary range or be redundant. This rule standardizes on using the named
 // secondary range by removing the direct CIDR block definition in such cases.
-var ServicesIPV4CIDRRuleDefinition = hclmodifier.Rule{
+var ServicesIPV4CIDRRuleDefinition = types.Rule{
 	Name:               "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.BlockExists, // Ensure ip_allocation_policy block exists first
+			Type: types.BlockExists, // Ensure ip_allocation_policy block exists first
 			Path: []string{"ip_allocation_policy"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"ip_allocation_policy", "cluster_secondary_range_name"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"ip_allocation_policy", "services_ipv4_cidr_block"},
 		},
 	},

@@ -6,7 +6,8 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite" // Required for hclwrite.Block type hint if used
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
-	// "github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // No longer needed for local Rule type
+
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
 )
 
 // AutopilotRuleDefinition is a placeholder for the AutopilotRule because its complex logic,
@@ -26,7 +27,7 @@ import (
 // errors if these attributes are left in the configuration. This rule (via its direct function) cleans these up.
 // If an imported cluster has `enable_autopilot = false` or an invalid value for it, removing the attribute
 // helps avoid potential errors if the user intends to manage it as a standard cluster or correct the attribute.
-var AutopilotRuleDefinition = Rule{ // Use local Rule type
+var AutopilotRuleDefinition = types.Rule{ // Use types.Rule
 	Name:               "Autopilot Configuration Cleanup Rule (handled by ApplyAutopilotRule)",
 	TargetResourceType: "google_container_cluster",
 	// Conditions and Actions are omitted as this rule is not processed by the generic engine.
@@ -161,8 +162,16 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 					resLogger.Debug("Attempting to remove all 'node_pool' blocks.", zap.Int("count", len(nodePoolBlocksToRemove)))
 					for _, npBlock := range nodePoolBlocksToRemove {
 						// Check if block still exists before attempting removal, as its Body reference might be stale if parent was modified
-						if m.File().Body().FirstMatchingBlock("node_pool", npBlock.Labels()) != nil {
-							if removed := m.File().Body().RemoveBlock(npBlock); removed {
+						// Corrected: Search within the current cluster block's body (block.Body())
+						matchingBlockInParent := false
+						for _, b := range block.Body().Blocks() {
+							if b == npBlock { // Compare block pointers
+								matchingBlockInParent = true
+								break
+							}
+						}
+						if matchingBlockInParent {
+							if removed := block.Body().RemoveBlock(npBlock); removed { // Corrected: Remove from block.Body()
 								modificationCount++
 								resLogger.Info("Removed 'node_pool' block instance.", zap.Strings("labels", npBlock.Labels()))
 							} else {
@@ -172,6 +181,8 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 									firstError = errRemoveNP
 								}
 							}
+						} else {
+							resLogger.Debug("Node pool block instance already removed or not found in parent for removal.", zap.Strings("labels", npBlock.Labels()))
 						}
 					}
 				}

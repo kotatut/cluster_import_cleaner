@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // BinaryAuthorizationRuleDefinition defines a rule for handling conflicts within the `binary_authorization`
@@ -17,26 +17,26 @@ import (
 // sufficient to control the state of Binary Authorization. The `enabled` attribute can be redundant and
 // potentially lead to conflicts or misunderstandings. This rule simplifies the configuration by removing
 // `enabled` when `evaluation_mode` is present, relying on `evaluation_mode` as the source of truth.
-var BinaryAuthorizationRuleDefinition = hclmodifier.Rule{
+var BinaryAuthorizationRuleDefinition = types.Rule{
 	Name:               "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.BlockExists, // Ensure binary_authorization block exists first
+			Type: types.BlockExists, // Ensure binary_authorization block exists first
 			Path: []string{"binary_authorization"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"binary_authorization", "enabled"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"binary_authorization", "evaluation_mode"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"binary_authorization", "enabled"},
 		},
 	},
