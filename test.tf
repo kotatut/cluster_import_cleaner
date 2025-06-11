@@ -85,7 +85,6 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
     enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
   }
 
-  logging_service = "logging.googleapis.com/kubernetes"
 
   master_auth {
     client_certificate_config {
@@ -106,9 +105,8 @@ resource "google_container_cluster" "cluster_3_clone_tfer" {
     }
   }
 
-  monitoring_service = "monitoring.googleapis.com/kubernetes"
-  name               = "cluster-3-clone-tfer"
-  network            = "projects/terrakot/global/networks/default"
+  name    = "cluster-3-clone-tfer"
+  network = "projects/terrakot/global/networks/default"
 
   network_policy {
     enabled  = "false"

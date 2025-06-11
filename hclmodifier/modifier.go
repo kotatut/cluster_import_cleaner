@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
-	// No longer importing "github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" for types
 )
 
 // --- Rule Engine Structures and Processor Signature ---
@@ -79,10 +78,9 @@ type Rule struct {
 	// For example, if TargetResourceType is "google_sql_database_instance", TargetResourceLabels could be ["my_db_instance_name"].
 	// If empty, the rule applies to all resources of TargetResourceType.
 	TargetResourceLabels []string
-	Conditions []RuleCondition // Conditions is a list of conditions that must ALL be true (AND logic) for the actions to be performed.
-	Actions    []RuleAction    // Actions is a list of actions to be performed if all conditions are met.
+	Conditions           []RuleCondition // Conditions is a list of conditions that must ALL be true (AND logic) for the actions to be performed.
+	Actions              []RuleAction    // Actions is a list of actions to be performed if all conditions are met.
 }
-
 
 // Modifier encapsulates an HCL file that can be programmatically modified.
 // It holds the parsed HCL file representation and a logger for operational insights.
@@ -317,7 +315,7 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 					zap.Strings("blockLabels", block.Labels()),
 					zap.Error(errRemove))
 			} else {
-				if block.Body().GetAttribute(attrName) == nil { 
+				if block.Body().GetAttribute(attrName) == nil {
 					removedCount++
 				}
 			}
@@ -335,7 +333,7 @@ func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceNa
 	}
 
 	m.Logger.Info("Finished removing attributes",
-		zap.Int("totalAttributesActuallyRemoved", removedCount), 
+		zap.Int("totalAttributesActuallyRemoved", removedCount),
 		zap.String("resourceTypeLabel", resourceTypeLabel),
 		zap.Any("optionalResourceName", optionalResourceName))
 	return removedCount, nil
@@ -371,7 +369,7 @@ func (m *Modifier) GetNestedBlock(currentBlockBody *hclwrite.Body, path []string
 					break
 				}
 				currentLevelBody = block.Body()
-				foundBlock = block 
+				foundBlock = block
 				break
 			}
 		}
@@ -435,7 +433,7 @@ func (m *Modifier) GetAttributeValueByPath(initialBlockBody *hclwrite.Body, path
 		return cty.NilVal, nil, fmt.Errorf("attribute '%s' not found in specified block", attributeName)
 	}
 
-	val, err := m.GetAttributeValue(attr) 
+	val, err := m.GetAttributeValue(attr)
 	if err != nil {
 		logger.Debug("GetAttributeValueByPath: Could not get value of attribute.", zap.String("attributeName", attributeName), zap.Error(err))
 		return cty.NilVal, attr, fmt.Errorf("could not get value of attribute '%s': %w", attributeName, err)
@@ -485,7 +483,7 @@ func (m *Modifier) RemoveAttributeByPath(initialBlockBody *hclwrite.Body, path [
 
 	if targetBody.GetAttribute(attributeName) == nil {
 		logger.Debug("RemoveAttributeByPath: Attribute to remove not found, no action needed.", zap.String("attributeName", attributeName))
-		return nil 
+		return nil
 	}
 
 	targetBody.RemoveAttribute(attributeName)
@@ -540,7 +538,7 @@ func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path
 
 	if blockToRemove == nil {
 		logger.Debug("RemoveNestedBlockByPath: Block to remove not found, no action needed.", zap.String("blockToRemoveName", blockToRemoveName))
-		return nil 
+		return nil
 	}
 
 	if removed := bodyToRemoveFrom.RemoveBlock(blockToRemove); !removed {
@@ -580,7 +578,7 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 
 			if len(currentRule.TargetResourceLabels) > 0 {
 				if len(block.Labels()) < 1+len(currentRule.TargetResourceLabels) {
-					continue 
+					continue
 				}
 				match := true
 				for i, expectedLabel := range currentRule.TargetResourceLabels {
@@ -639,7 +637,7 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 						} else if floatVal, err := strconv.ParseFloat(condition.ExpectedValue, 64); err == nil {
 							expectedCtyValue = cty.NumberFloatVal(floatVal)
 						} else {
-							parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as number: %v or %v", condition.ExpectedValue, err, err) 
+							parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as number: %v or %v", condition.ExpectedValue, err, err)
 						}
 					default:
 						condLogger.Warn("AttributeValueEquals: Actual value type is not a primitive type supported for robust ExpectedValue parsing. Falling back to string comparison of actual value.", zap.Any("actualValueType", val.Type()))
@@ -657,33 +655,33 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 								conditionsMet = false
 							}
 						} else {
-							conditionsMet = false 
+							conditionsMet = false
 						}
 						if !conditionsMet {
 							condLogger.Debug("AttributeValueEquals not met (fallback string comparison or unsupported type).", zap.String("expectedValue", condition.ExpectedValue))
 						}
-						break 
+						break
 					}
-					
+
 					if parseErr != nil {
 						condLogger.Warn("AttributeValueEquals: Error parsing ExpectedValue, condition not met.", zap.Error(parseErr), zap.String("expectedStr", condition.ExpectedValue), zap.Any("actualType", val.Type()))
 						conditionsMet = false
-					} else if conditionsMet && !val.Equals(expectedCtyValue).True() { 
+					} else if conditionsMet && !val.Equals(expectedCtyValue).True() {
 						condLogger.Debug("AttributeValueEquals not met.", zap.Any("actualValue", val), zap.Any("parsedExpectedValue", expectedCtyValue))
 						conditionsMet = false
 					}
 				default:
 					condLogger.Warn("Unknown condition type.")
-					conditionsMet = false 
+					conditionsMet = false
 				}
 				if !conditionsMet {
-					break 
+					break
 				}
 			}
 
 			if conditionsMet {
 				resourceLogger.Info("All conditions met. Performing actions.")
-				for _, action := range rule.Actions {
+				for _, action := range currentRule.Actions {
 					actLogger := resourceLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
 					var errAction error
 					switch action.Type {
@@ -708,9 +706,9 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 						} else if fVal, err := strconv.ParseFloat(action.ValueToSet, 64); err == nil {
 							valueToSet = cty.NumberFloatVal(fVal)
 						} else {
-							valueToSet = cty.StringVal(action.ValueToSet) 
+							valueToSet = cty.StringVal(action.ValueToSet)
 						}
-						
+
 						errAction = m.SetAttributeValueByPath(block.Body(), action.Path, valueToSet)
 						if errAction == nil {
 							totalModifications++
