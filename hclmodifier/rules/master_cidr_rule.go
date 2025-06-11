@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // MasterCIDRRuleDefinition defines a rule for handling potential conflicts related to master IP configuration
@@ -20,26 +20,26 @@ import (
 // configuration errors if it's not set to the correct master IP or if it's not actually needed.
 // This rule simplifies the configuration for private clusters by removing this potentially problematic attribute
 // when `master_ipv4_cidr_block` is already specified.
-var MasterCIDRRuleDefinition = hclmodifier.Rule{
+var MasterCIDRRuleDefinition = types.Rule{
 	Name:               "Master CIDR Rule: Remove private_endpoint_subnetwork if master_ipv4_cidr_block and private_cluster_config exist",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"master_ipv4_cidr_block"},
 		},
 		{
-			Type: hclmodifier.BlockExists,
+			Type: types.BlockExists,
 			Path: []string{"private_cluster_config"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"private_cluster_config", "private_endpoint_subnetwork"},
 		},
 	},

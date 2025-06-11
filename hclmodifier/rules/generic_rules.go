@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // RuleRemoveLoggingService defines a rule for managing the `logging_service` attribute in `google_container_cluster` resources,
@@ -16,27 +16,27 @@ import (
 // `cluster_telemetry.type = "ENABLED"`. When `cluster_telemetry.type = "ENABLED"` is set, GKE manages logging
 // and monitoring services, making the explicit `logging_service` attribute redundant and potentially conflicting.
 // This rule removes the `logging_service` to align with the managed Cloud Operations configuration.
-var RuleRemoveLoggingService = hclmodifier.Rule{
+var RuleRemoveLoggingService = types.Rule{
 	Name:               "Logging Service Rule: Remove logging_service if cluster_telemetry.type is ENABLED",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"logging_service"},
 		},
 		{
-			Type: hclmodifier.BlockExists,
+			Type: types.BlockExists,
 			Path: []string{"cluster_telemetry"},
 		},
 		{
-			Type:          hclmodifier.AttributeValueEquals,
+			Type:          types.AttributeValueEquals,
 			Path:          []string{"cluster_telemetry", "type"},
 			ExpectedValue: "ENABLED",
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"logging_service"},
 		},
 	},
@@ -53,22 +53,22 @@ var RuleRemoveLoggingService = hclmodifier.Rule{
 // block (which allows more granular control, like managed Prometheus). The `monitoring_config` block is the
 // preferred way to configure monitoring. Having both can be confusing or lead to issues. This rule
 // cleans up the configuration by removing the legacy `monitoring_service` when `monitoring_config` is used.
-var RuleRemoveMonitoringService = hclmodifier.Rule{
+var RuleRemoveMonitoringService = types.Rule{
 	Name:               "Monitoring Service Rule: Remove monitoring_service if monitoring_config block exists",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"monitoring_service"},
 		},
 		{
-			Type: hclmodifier.BlockExists,
+			Type: types.BlockExists,
 			Path: []string{"monitoring_config"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"monitoring_service"},
 		},
 	},
@@ -88,22 +88,22 @@ var RuleRemoveMonitoringService = hclmodifier.Rule{
 // for node pools, especially when `min_master_version` is also set. This rule aims to simplify version
 // management by removing `node_version` when `min_master_version` is present, encouraging version
 // definition at the node pool level if specific versions are needed, or relying on GKE defaults.
-var RuleRemoveNodeVersion = hclmodifier.Rule{
+var RuleRemoveNodeVersion = types.Rule{
 	Name:               "Node Version Rule: Remove cluster-level node_version if min_master_version also exists",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"node_version"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"min_master_version"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"node_version"},
 		},
 	},

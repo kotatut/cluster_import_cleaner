@@ -11,82 +11,15 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
+
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import the new types package
 )
-
-// --- Rule Engine Structures and Processor Signature ---
-
-// ConditionType is an enumeration defining the types of conditions that can be checked by a Rule.
-type ConditionType string
-
-const (
-	AttributeExists       ConditionType = "AttributeExists"       // AttributeExists checks if a specific attribute exists at the given path.
-	AttributeDoesntExists ConditionType = "AttributeDoesntExists" // AttributeDoesntExists checks if a specific attribute is not present at the given path.
-	BlockExists           ConditionType = "BlockExists"           // BlockExists checks if a specific block exists at the given path.
-	AttributeValueEquals  ConditionType = "AttributeValueEquals"  // AttributeValueEquals checks if a specific attribute at the given path has a certain value.
-)
-
-// ActionType is an enumeration defining the types of actions that can be performed by a Rule.
-type ActionType string
-
-const (
-	RemoveAttribute   ActionType = "RemoveAttribute"   // RemoveAttribute removes a specific attribute at the given path.
-	RemoveBlock       ActionType = "RemoveBlock"       // RemoveBlock removes a specific block at the given path.
-	SetAttributeValue ActionType = "SetAttributeValue" // SetAttributeValue sets a specific attribute at the given path to a certain value.
-)
-
-// RuleCondition defines a specific condition that must be met for a Rule's actions to be triggered.
-// It specifies the type of check, the path to the HCL element, and an optional expected value.
-type RuleCondition struct {
-	Type ConditionType // Type is the kind of condition to check (e.g., AttributeExists, BlockExists).
-	// Path is a slice of strings representing the hierarchical path to the attribute or block.
-	// Example for a top-level attribute: `["attribute_name"]`
-	// Example for a nested attribute: `["block_name", "nested_block_name", "attribute_name"]`
-	// Example for a block: `["block_name", "nested_block_name"]`
-	Path []string
-	// Value is the cty.Value to compare against. This is used internally by the rule engine,
-	// typically populated after parsing ExpectedValue, for the AttributeValueEquals condition type.
-	Value cty.Value
-	// ExpectedValue is the string representation of the value to compare against for AttributeValueEquals.
-	// This string will be parsed into a cty.Value for comparison during rule processing.
-	ExpectedValue string
-}
-
-// RuleAction defines an action to be performed on an HCL structure if all conditions of a Rule are met.
-// It specifies the type of action, the path to the HCL element, and an optional value to set.
-type RuleAction struct {
-	Type ActionType // Type is the kind of action to perform (e.g., RemoveAttribute, SetAttributeValue).
-	// Path is a slice of strings representing the hierarchical path to the attribute or block.
-	// Example for a top-level attribute: `["attribute_name"]`
-	// Example for a nested attribute: `["block_name", "nested_block_name", "attribute_name"]`
-	// Example for removing a block: `["block_name", "nested_block_name"]`
-	Path []string
-	// ValueToSet is the string representation of the value to set for SetAttributeValue.
-	// This string will be parsed into a cty.Value before the attribute is set.
-	ValueToSet string
-	// PathToSet is a slice of strings representing the hierarchical path to the attribute to set as Value.
-	PathToSet []string
-}
-
-// Rule defines a single, named modification operation to be conditionally applied to HCL resources.
-// It consists of a target resource type, optional labels for more specific targeting, a set of
-// conditions that must all be met, and a set of actions to perform if the conditions are true.
-type Rule struct {
-	Name string // Name is a human-readable identifier for the rule (e.g., "Remove_cluster_ipv4_cidr_when_ip_allocation_policy_exists").
-	// TargetResourceType is the HCL resource type this rule applies to (e.g., "google_container_cluster").
-	TargetResourceType string
-	// TargetResourceLabels provide optional additional label criteria to narrow down the target resource.
-	// For example, if TargetResourceType is "google_sql_database_instance", TargetResourceLabels could be ["my_db_instance_name"].
-	// If empty, the rule applies to all resources of TargetResourceType.
-	TargetResourceLabels []string
-	Conditions           []RuleCondition // Conditions is a list of conditions that must ALL be true (AND logic) for the actions to be performed.
-	Actions              []RuleAction    // Actions is a list of actions to be performed if all conditions are met.
-}
 
 // Modifier encapsulates an HCL file that can be programmatically modified.
 // It holds the parsed HCL file representation and a logger for operational insights.
 type Modifier struct {
-	file   *hclwrite.File // The in-memory representation of the HCL file.
-	Logger *zap.Logger    // Logger for logging activities within the modifier.
+	file   *hclwrite.File   // The in-memory representation of the HCL file.
+	Logger *zap.Logger      // Logger for logging activities within the modifier.
 }
 
 // NewFromFile creates a new Modifier instance by reading and parsing an HCL file
@@ -556,7 +489,7 @@ func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path
 // rules: A slice of Rule structs to be applied.
 // Returns the total number of modifications made to the HCL file and a slice of errors
 // encountered during the application of any rule. Processing continues even if some rules error.
-func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []error) { // Use local Rule type
+func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, errors []error) { // Use types.Rule
 	m.Logger.Info("Starting ApplyRules processing.", zap.Int("numberOfRules", len(inputRules)))
 	totalModifications := 0
 	var collectedErrors []error
@@ -598,25 +531,25 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 			for _, condition := range currentRule.Conditions {
 				condLogger := resourceLogger.With(zap.String("conditionType", string(condition.Type)), zap.Strings("conditionPath", condition.Path))
 				switch condition.Type {
-				case AttributeExists: // Use local ConditionType
+				case types.AttributeExists: // Use types.ConditionType
 					_, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
 					if err != nil {
 						condLogger.Debug("Condition AttributeExists not met.", zap.Error(err))
 						conditionsMet = false
 					}
-				case AttributeDoesntExists: // Use local ConditionType
+				case types.AttributeDoesntExists: // Use types.ConditionType
 					_, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
 					if err == nil {
 						condLogger.Debug("Condition AttributeDoesntExists not met.", zap.Error(err))
 						conditionsMet = false
 					}
-				case BlockExists: // Use local ConditionType
+				case types.BlockExists: // Use types.ConditionType
 					_, err := m.GetNestedBlock(block.Body(), condition.Path)
 					if err != nil {
 						condLogger.Debug("Condition BlockExists not met.", zap.Error(err))
 						conditionsMet = false
 					}
-				case AttributeValueEquals: // Use local ConditionType
+				case types.AttributeValueEquals: // Use types.ConditionType
 					val, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
 					if err != nil {
 						condLogger.Debug("AttributeValueEquals: Attribute not found for comparison.", zap.Error(err))
@@ -691,19 +624,19 @@ func (m *Modifier) ApplyRules(inputRules []Rule) (modifications int, errors []er
 					actLogger := resourceLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
 					var errAction error
 					switch action.Type {
-					case RemoveAttribute: // Use local ActionType
+					case types.RemoveAttribute: // Use types.ActionType
 						errAction = m.RemoveAttributeByPath(block.Body(), action.Path)
 						if errAction == nil {
 							totalModifications++
 							actLogger.Info("Action RemoveAttribute successful.")
 						}
-					case RemoveBlock: // Use local ActionType
+					case types.RemoveBlock: // Use types.ActionType
 						errAction = m.RemoveNestedBlockByPath(block.Body(), action.Path)
 						if errAction == nil {
 							totalModifications++
 							actLogger.Info("Action RemoveBlock successful.")
 						}
-					case SetAttributeValue: // Use local ActionType
+					case types.SetAttributeValue: // Use types.ActionType
 						var valueToSet cty.Value
 						if len(action.PathToSet) != 0 {
 							valueByPath, _, err := m.GetAttributeValueByPath(block.Body(), action.PathToSet)

@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier" // Import the hclmodifier package
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import the types package
 )
 
 // ClusterIPV4CIDRRuleDefinition defines a rule for handling conflicts between the top-level `cluster_ipv4_cidr`
@@ -17,26 +17,26 @@ import (
 // While GCP might allow this, it can lead to confusion and potential conflicts, as `ip_allocation_policy`
 // is the more modern and flexible way to define IP allocation. This rule cleans up the configuration
 // by removing the redundant top-level attribute, favoring the one within `ip_allocation_policy`.
-var ClusterIPV4CIDRRuleDefinition = hclmodifier.Rule{
+var ClusterIPV4CIDRRuleDefinition = types.Rule{
 	Name:               "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists",
 	TargetResourceType: "google_container_cluster",
-	Conditions: []hclmodifier.RuleCondition{
+	Conditions: []types.RuleCondition{
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"cluster_ipv4_cidr"},
 		},
 		{
-			Type: hclmodifier.BlockExists,
+			Type: types.BlockExists,
 			Path: []string{"ip_allocation_policy"},
 		},
 		{
-			Type: hclmodifier.AttributeExists,
+			Type: types.AttributeExists,
 			Path: []string{"ip_allocation_policy", "cluster_ipv4_cidr_block"},
 		},
 	},
-	Actions: []hclmodifier.RuleAction{
+	Actions: []types.RuleAction{
 		{
-			Type: hclmodifier.RemoveAttribute,
+			Type: types.RemoveAttribute,
 			Path: []string{"cluster_ipv4_cidr"},
 		},
 	},
