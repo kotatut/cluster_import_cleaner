@@ -6,6 +6,7 @@ import (
 
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier"
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -59,14 +60,13 @@ or older templates. The tool modifies the file in-place.`,
 		}
 
 		// 2. Define all rules to be applied by the generic ApplyRules engine.
-		allRules := []hclmodifier.Rule{
+		allRules := []types.Rule{
 			rules.ClusterIPV4CIDRRuleDefinition,
 			rules.MasterCIDRRuleDefinition,
 			rules.ServicesIPV4CIDRRuleDefinition,
 			rules.BinaryAuthorizationRuleDefinition,
 			rules.RuleRemoveLoggingService,
 			rules.RuleRemoveMonitoringService,
-			rules.RuleRemoveNodeVersion,
 			rules.SetMinVersionRuleDefinition,
 			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
 			// due to their complex logic not yet fully translated to the generic rule engine.

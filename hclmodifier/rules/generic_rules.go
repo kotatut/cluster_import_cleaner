@@ -73,38 +73,3 @@ var RuleRemoveMonitoringService = types.Rule{
 		},
 	},
 }
-
-// RuleRemoveNodeVersion defines a rule for managing GKE cluster and node pool version attributes.
-//
-// What it does: It checks if a `google_container_cluster` resource has both `node_version` and
-// `min_master_version` attributes defined at the cluster level. If both are present, it removes
-// the `node_version` attribute.
-//
-// Why it's necessary for GKE imports: When importing a GKE cluster, Terraform might populate both
-// `min_master_version` (for the control plane) and `node_version` (for the default node pool, or as a
-// cluster-wide default for node pools). However, GKE generally manages node pool versions relative
-// to the master version, or allows them to be managed independently per node pool. Defining a cluster-level
-// `node_version` can sometimes conflict with node pool specific versions or GKE's auto-upgrade mechanisms
-// for node pools, especially when `min_master_version` is also set. This rule aims to simplify version
-// management by removing `node_version` when `min_master_version` is present, encouraging version
-// definition at the node pool level if specific versions are needed, or relying on GKE defaults.
-var RuleRemoveNodeVersion = types.Rule{
-	Name:               "Node Version Rule: Remove cluster-level node_version if min_master_version also exists",
-	TargetResourceType: "google_container_cluster",
-	Conditions: []types.RuleCondition{
-		{
-			Type: types.AttributeExists,
-			Path: []string{"node_version"},
-		},
-		{
-			Type: types.AttributeExists,
-			Path: []string{"min_master_version"},
-		},
-	},
-	Actions: []types.RuleAction{
-		{
-			Type: types.RemoveAttribute,
-			Path: []string{"node_version"},
-		},
-	},
-}

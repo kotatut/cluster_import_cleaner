@@ -8,9 +8,9 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	// "github.com/hashicorp/hcl/v2/hclsyntax" // Removed as it's unused
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/stretchr/testify/assert" // For assertions
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
-	"github.com/stretchr/testify/assert" // For assertions
 
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // Import for rule definitions
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
@@ -19,12 +19,12 @@ import (
 func TestEnhancedAttributeValueEquals(t *testing.T) {
 	logger := zap.NewNop()
 	tests := []struct {
-		name                  string
-		hclContent            string
-		rule                  types.Rule
-		expectedModifications int
-		expectAttributeRemoved bool // Or other specific checks for your test
-		attributePathToRemove []string // Path to attribute that rule should remove
+		name                   string
+		hclContent             string
+		rule                   types.Rule
+		expectedModifications  int
+		expectAttributeRemoved bool     // Or other specific checks for your test
+		attributePathToRemove  []string // Path to attribute that rule should remove
 	}{
 		{
 			name: "AttributeValueEquals with boolean true",
@@ -41,9 +41,9 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 				},
 				Actions: []types.RuleAction{{Type: types.RemoveAttribute, Path: []string{"some_other_attr"}}},
 			},
-			expectedModifications: 1,
+			expectedModifications:  1,
 			expectAttributeRemoved: true,
-			attributePathToRemove: []string{"some_other_attr"},
+			attributePathToRemove:  []string{"some_other_attr"},
 		},
 		{
 			name: "AttributeValueEquals with boolean false",
@@ -59,9 +59,9 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 				},
 				Actions: []types.RuleAction{{Type: types.RemoveAttribute, Path: []string{"some_other_attr"}}},
 			},
-			expectedModifications: 1,
+			expectedModifications:  1,
 			expectAttributeRemoved: true,
-			attributePathToRemove: []string{"some_other_attr"},
+			attributePathToRemove:  []string{"some_other_attr"},
 		},
 		{
 			name: "AttributeValueEquals with integer",
@@ -77,9 +77,9 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 				},
 				Actions: []types.RuleAction{{Type: types.RemoveAttribute, Path: []string{"another_attr"}}},
 			},
-			expectedModifications: 1,
+			expectedModifications:  1,
 			expectAttributeRemoved: true,
-			attributePathToRemove: []string{"another_attr"},
+			attributePathToRemove:  []string{"another_attr"},
 		},
 		{
 			name: "AttributeValueEquals with float (parsed as number)",
@@ -99,9 +99,9 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 				},
 				Actions: []types.RuleAction{{Type: types.RemoveAttribute, Path: []string{"attr_to_remove"}}},
 			},
-			expectedModifications: 1,
+			expectedModifications:  1,
 			expectAttributeRemoved: true,
-			attributePathToRemove: []string{"attr_to_remove"},
+			attributePathToRemove:  []string{"attr_to_remove"},
 		},
 		{
 			name: "AttributeValueEquals - condition not met (bool)",
@@ -117,9 +117,9 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 				},
 				Actions: []types.RuleAction{{Type: types.RemoveAttribute, Path: []string{"some_other_attr"}}},
 			},
-			expectedModifications: 0,
+			expectedModifications:  0,
 			expectAttributeRemoved: false,
-			attributePathToRemove: []string{"some_other_attr"},
+			attributePathToRemove:  []string{"some_other_attr"},
 		},
 	}
 
@@ -155,12 +155,12 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 					assert.Nil(t, attr, "Attribute '%s' should have been removed", tc.attributePathToRemove)
 				}
 			} else if tc.expectedModifications == 0 { // Check attribute still exists if no modification was expected
-					resourceBlock, _ := modifier.GetBlock("resource", []string{"google_container_cluster", "test"})
-					assert.NotNil(t, resourceBlock, "Test resource block should exist")
-					if resourceBlock != nil {
-						_, attr, _ := modifier.GetAttributeValueByPath(resourceBlock.Body(), tc.attributePathToRemove)
-						assert.NotNil(t, attr, "Attribute '%s' should still exist", tc.attributePathToRemove)
-					}
+				resourceBlock, _ := modifier.GetBlock("resource", []string{"google_container_cluster", "test"})
+				assert.NotNil(t, resourceBlock, "Test resource block should exist")
+				if resourceBlock != nil {
+					_, attr, _ := modifier.GetAttributeValueByPath(resourceBlock.Body(), tc.attributePathToRemove)
+					assert.NotNil(t, attr, "Attribute '%s' should still exist", tc.attributePathToRemove)
+				}
 			}
 		})
 	}
@@ -372,7 +372,7 @@ func TestRuleSetAttributeValue(t *testing.T) {
 			assert.NoError(t, err, "Failed to write to temp file")
 			err = tmpFile.Close()
 			assert.NoError(t, err, "Failed to close temp file")
-			
+
 			modifier, err := NewFromFile(tmpFile.Name(), logger)
 			assert.NoError(t, err, "NewFromFile() error")
 
@@ -383,217 +383,11 @@ func TestRuleSetAttributeValue(t *testing.T) {
 			// Normalize and compare HCL content
 			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
 			assert.False(t, diags.HasErrors(), "Failed to parse expected HCL content: %v", diags)
-			
+
 			actualF, diags := hclwrite.ParseConfig(modifier.File().Bytes(), "actual.hcl", hcl.InitialPos)
 			assert.False(t, diags.HasErrors(), "Failed to parse actual HCL content: %v", diags)
 
 			assert.Equal(t, string(expectedF.Bytes()), string(actualF.Bytes()), "HCL content mismatch")
-		})
-	}
-}
-
-func TestApplyRuleRemoveNodeVersion(t *testing.T) {
-	t.Helper()
-	logger := zap.NewNop()
-
-	tests := []struct {
-		name                            string
-		hclContent                      string
-		expectedModifications           int
-		resourceLabelsToVerify          []string // e.g. {"google_container_cluster", "primary"}
-		expectNodeVersionRemoved        bool
-		expectMinMasterVersionPresent   bool     // Whether min_master_version should be present after rule application
-		originalMinMasterVersionPresent bool // Whether min_master_version was present in the input
-	}{
-		{
-			name: "node_version and min_master_version both present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  location           = "us-central1"
-  node_version       = "1.25.0-gke.100"
-  min_master_version = "1.25.0"
-}`,
-			expectedModifications:           1,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			expectNodeVersionRemoved:        true,
-			expectMinMasterVersionPresent:   true,
-			originalMinMasterVersionPresent: true,
-		},
-		{
-			name: "Only node_version present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  location           = "us-central1"
-  node_version       = "1.25.0-gke.100"
-}`,
-			expectedModifications:           0,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			expectNodeVersionRemoved:        false,
-			expectMinMasterVersionPresent:   false,
-			originalMinMasterVersionPresent: false,
-		},
-		{
-			name: "Only min_master_version present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  location           = "us-central1"
-  min_master_version = "1.25.0"
-}`,
-			expectedModifications:           0,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			expectNodeVersionRemoved:        false, // No node_version to remove
-			expectMinMasterVersionPresent:   true,
-			originalMinMasterVersionPresent: true,
-		},
-		{
-			name: "Neither node_version nor min_master_version present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name     = "primary-cluster"
-  location = "us-central1"
-}`,
-			expectedModifications:           0,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			expectNodeVersionRemoved:        false,
-			expectMinMasterVersionPresent:   false,
-			originalMinMasterVersionPresent: false,
-		},
-		{
-			name: "Non-google_container_cluster resource with both versions",
-			hclContent: `resource "google_compute_instance" "test_vm" {
-  name               = "test-vm"
-  node_version       = "1.25.0-gke.100"
-  min_master_version = "1.25.0"
-}`,
-			expectedModifications:           0,
-			resourceLabelsToVerify:          []string{"google_compute_instance", "test_vm"},
-			expectNodeVersionRemoved:        false,
-			expectMinMasterVersionPresent:   true, // Should remain as it's not the target resource
-			originalMinMasterVersionPresent: true,
-		},
-		{
-			name: "google_container_cluster with versions among other attributes and blocks",
-			hclContent: `resource "google_container_cluster" "complex" {
-  name               = "complex-cluster"
-  location           = "us-east1"
-  description        = "A complex cluster"
-  node_version       = "1.26.0-gke.200"
-  min_master_version = "1.26.0"
-  initial_node_count = 1
-  ip_allocation_policy {}
-}`,
-			expectedModifications:           1,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "complex"},
-			expectNodeVersionRemoved:        true,
-			expectMinMasterVersionPresent:   true,
-			originalMinMasterVersionPresent: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			tmpFile, err := os.CreateTemp(tempDir, "test_node_version_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
-			// No defer os.Remove(tmpFile.Name()) here to inspect on failure
-
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
-				tmpFile.Close()
-				t.Fatalf("Failed to write to temp file: %v", err)
-			}
-			if err := tmpFile.Close(); err != nil {
-				t.Fatalf("Failed to close temp file: %v", err)
-			}
-
-			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			if err != nil {
-				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
-			}
-
-			modifications, errs := modifier.ApplyRules([]types.Rule{rules.RuleRemoveNodeVersion})
-			if len(errs) > 0 {
-				var errorMessages string
-				for _, e := range errs {
-					errorMessages += e.Error() + "\n"
-				}
-				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
-			}
-
-			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
-			}
-
-			// Verify the HCL content
-			modifiedContentBytes := modifier.File().Bytes()
-			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
-			if diags.HasErrors() {
-				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
-			}
-
-			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
-				blockType := tc.resourceLabelsToVerify[0]
-				resourceName := tc.resourceLabelsToVerify[1]
-				targetBlock, _ := findBlockInParsedFile(verifiedFile, blockType, resourceName)
-
-				if targetBlock == nil {
-					// If we expected modifications, or if the original block was supposed to exist, then failing to find it is an error.
-					if tc.expectedModifications > 0 || tc.hclContent != "" { // Simple check if original HCL wasn't empty
-						t.Fatalf("Target resource block '%s' '%s' not found in modified HCL. Modified HCL:\n%s", blockType, resourceName, string(modifiedContentBytes))
-					}
-					// If no modifications expected and target block not found, it might be okay if original HCL was empty or didn't contain it.
-					// This part of the check might need refinement based on how findBlockInParsedFile handles "not found".
-					return // Nothing more to check if block isn't there
-				}
-
-				nodeVersionAttr := targetBlock.Body().GetAttribute("node_version")
-				minMasterVersionAttr := targetBlock.Body().GetAttribute("min_master_version")
-
-				if tc.expectNodeVersionRemoved {
-					if nodeVersionAttr != nil {
-						t.Errorf("Expected 'node_version' to be REMOVED from resource '%s' '%s', but it was FOUND. Modified HCL:\n%s",
-							blockType, resourceName, string(modifiedContentBytes))
-					}
-				} else {
-					// If not expected to be removed, it should be present if it was in the original HCL.
-					originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
-					originalTargetBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, resourceName)
-					if originalTargetBlock != nil && originalTargetBlock.Body().GetAttribute("node_version") != nil {
-						if nodeVersionAttr == nil {
-							t.Errorf("Expected 'node_version' to be PRESENT in resource '%s' '%s', but it was NOT FOUND. Modified HCL:\n%s",
-								blockType, resourceName, string(modifiedContentBytes))
-						}
-					} else if nodeVersionAttr != nil {
-						// If it wasn't in original but is now present, that's also an issue.
-						t.Errorf("'node_version' was unexpectedly ADDED to resource '%s' '%s'. Modified HCL:\n%s",
-							blockType, resourceName, string(modifiedContentBytes))
-					}
-				}
-
-				if tc.expectMinMasterVersionPresent {
-					if minMasterVersionAttr == nil {
-						t.Errorf("Expected 'min_master_version' to be PRESENT in resource '%s' '%s', but it was NOT FOUND. Modified HCL:\n%s",
-							blockType, resourceName, string(modifiedContentBytes))
-					}
-				} else {
-					// If not expected to be present (e.g. it was never there, or rule should not affect it)
-					if tc.originalMinMasterVersionPresent && minMasterVersionAttr == nil {
-						// This case should only happen if the rule incorrectly removed it.
-						// For this specific rule, min_master_version should never be removed.
-						t.Errorf("'min_master_version' was expected to be present (as it was in original and rule should not remove it) but was NOT FOUND in resource '%s' '%s'. Modified HCL:\n%s",
-							blockType, resourceName, string(modifiedContentBytes))
-					} else if !tc.originalMinMasterVersionPresent && minMasterVersionAttr != nil {
-						t.Errorf("'min_master_version' was unexpectedly ADDED to resource '%s' '%s'. Modified HCL:\n%s",
-							blockType, resourceName, string(modifiedContentBytes))
-					}
-				}
-			}
-			if tc.expectedModifications > 0 || len(errs) > 0 {
-				// t.Logf("Test %s: HCL after modification for inspection:\n%s", tc.name, string(modifier.File().Bytes()))
-			} else {
-				os.Remove(tmpFile.Name()) // Clean up if test passed and no modifications/errors
-			}
 		})
 	}
 }
@@ -611,13 +405,13 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 	logger := zap.NewNop()
 
 	tests := []struct {
-		name                           string
-		hclContent                     string
-		expectedModifications          int
-		gkeResourceName                string
-		nodePoolChecks                 []nodePoolCheck
-		expectNoOtherResourceChanges   bool
-		expectNoGKEResource            bool
+		name                         string
+		hclContent                   string
+		expectedModifications        int
+		gkeResourceName              string
+		nodePoolChecks               []nodePoolCheck
+		expectNoOtherResourceChanges bool
+		expectNoGKEResource          bool
 	}{
 		{
 			name: "BothCountsPresent",
@@ -633,7 +427,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "default-pool",
+					nodePoolName:                  "default-pool",
 					expectInitialNodeCountRemoved: true,
 					expectNodeCountPresent:        true,
 					expectedNodeCountValue:        intPtr(5),
@@ -653,7 +447,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "default-pool",
+					nodePoolName:                  "default-pool",
 					expectInitialNodeCountRemoved: true,
 					expectNodeCountPresent:        false,
 				},
@@ -672,7 +466,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "default-pool",
+					nodePoolName:                  "default-pool",
 					expectInitialNodeCountRemoved: false,
 					expectNodeCountPresent:        true,
 					expectedNodeCountValue:        intPtr(4),
@@ -692,7 +486,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "default-pool",
+					nodePoolName:                  "default-pool",
 					expectInitialNodeCountRemoved: false,
 					expectNodeCountPresent:        false,
 				},
@@ -723,24 +517,24 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "pool-one",
+					nodePoolName:                  "pool-one",
 					expectInitialNodeCountRemoved: true,
 					expectNodeCountPresent:        true,
 					expectedNodeCountValue:        intPtr(5),
 				},
 				{
-					nodePoolName:               "pool-two",
+					nodePoolName:                  "pool-two",
 					expectInitialNodeCountRemoved: true,
 					expectNodeCountPresent:        false,
 				},
 				{
-					nodePoolName:               "pool-three",
+					nodePoolName:                  "pool-three",
 					expectInitialNodeCountRemoved: false,
 					expectNodeCountPresent:        true,
 					expectedNodeCountValue:        intPtr(4),
 				},
 				{
-					nodePoolName:               "pool-four",
+					nodePoolName:                  "pool-four",
 					expectInitialNodeCountRemoved: false,
 					expectNodeCountPresent:        false,
 				},
@@ -766,8 +560,8 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
   }
   initial_node_count = 5
 }`,
-			expectedModifications: 0,
-			gkeResourceName:       "",
+			expectedModifications:        0,
+			gkeResourceName:              "",
 			expectNoOtherResourceChanges: true,
 			nodePoolChecks:               nil,
 		},
@@ -801,10 +595,10 @@ resource "google_container_cluster" "gke_two" {
   }
 }`,
 			expectedModifications: 2,
-			gkeResourceName: "gke_one",
+			gkeResourceName:       "gke_one",
 			nodePoolChecks: []nodePoolCheck{
 				{
-					nodePoolName:               "gke-one-pool",
+					nodePoolName:                  "gke-one-pool",
 					expectInitialNodeCountRemoved: true,
 					expectNodeCountPresent:        true,
 					expectedNodeCountValue:        intPtr(5),
@@ -892,10 +686,10 @@ resource "google_container_cluster" "gke_two" {
 										blocksOfNpType = append(blocksOfNpType, nb)
 									}
 								}
-                                if len(blocksOfNpType) == 1 && blocksOfNpType[0].Body().GetAttribute("name") == nil {
-                                    foundNodePool = blocksOfNpType[0]
-                                    break
-                                }
+								if len(blocksOfNpType) == 1 && blocksOfNpType[0].Body().GetAttribute("name") == nil {
+									foundNodePool = blocksOfNpType[0]
+									break
+								}
 							}
 						}
 					}
@@ -1021,20 +815,20 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 	logger := zap.NewNop()
 
 	type privateClusterConfigCheck struct {
-		expectBlockExists                   bool
+		expectBlockExists                      bool
 		expectPrivateEndpointSubnetworkRemoved bool
-		expectOtherAttributeUnchanged       *string
+		expectOtherAttributeUnchanged          *string
 	}
 
 	tests := []struct {
-		name                        string
-		hclContent                  string
-		expectedModifications       int
-		gkeResourceName             string
-		expectMasterCIDRPresent     bool
-		privateClusterConfigCheck   *privateClusterConfigCheck
+		name                         string
+		hclContent                   string
+		expectedModifications        int
+		gkeResourceName              string
+		expectMasterCIDRPresent      bool
+		privateClusterConfigCheck    *privateClusterConfigCheck
 		expectNoOtherResourceChanges bool
-		expectNoGKEResource         bool
+		expectNoGKEResource          bool
 	}{
 		{
 			name: "BothPresent",
@@ -1050,9 +844,9 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 			gkeResourceName:         "gke_cluster",
 			expectMasterCIDRPresent: true,
 			privateClusterConfigCheck: &privateClusterConfigCheck{
-				expectBlockExists:                   true,
+				expectBlockExists:                      true,
 				expectPrivateEndpointSubnetworkRemoved: true,
-				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+				expectOtherAttributeUnchanged:          stringPtr("enable_private_endpoint"),
 			},
 		},
 		{
@@ -1081,9 +875,9 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 			gkeResourceName:         "gke_cluster",
 			expectMasterCIDRPresent: true,
 			privateClusterConfigCheck: &privateClusterConfigCheck{
-				expectBlockExists:                   true,
+				expectBlockExists:                      true,
 				expectPrivateEndpointSubnetworkRemoved: false,
-				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+				expectOtherAttributeUnchanged:          stringPtr("enable_private_endpoint"),
 			},
 		},
 		{
@@ -1099,9 +893,9 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 			gkeResourceName:         "gke_cluster",
 			expectMasterCIDRPresent: false,
 			privateClusterConfigCheck: &privateClusterConfigCheck{
-				expectBlockExists:                   true,
+				expectBlockExists:                      true,
 				expectPrivateEndpointSubnetworkRemoved: false,
-				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+				expectOtherAttributeUnchanged:          stringPtr("enable_private_endpoint"),
 			},
 		},
 		{
@@ -1116,9 +910,9 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 			gkeResourceName:         "gke_cluster",
 			expectMasterCIDRPresent: false,
 			privateClusterConfigCheck: &privateClusterConfigCheck{
-				expectBlockExists:                   true,
+				expectBlockExists:                      true,
 				expectPrivateEndpointSubnetworkRemoved: false,
-				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+				expectOtherAttributeUnchanged:          stringPtr("enable_private_endpoint"),
 			},
 		},
 		{
@@ -1143,8 +937,8 @@ func TestApplyMasterCIDRRule(t *testing.T) {
     enable_private_endpoint   = true
   }
 }`,
-			expectedModifications:      0,
-			gkeResourceName:            "",
+			expectedModifications:        0,
+			gkeResourceName:              "",
 			expectNoOtherResourceChanges: true,
 		},
 		{
@@ -1181,9 +975,9 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 			gkeResourceName:         "gke_one_match",
 			expectMasterCIDRPresent: true,
 			privateClusterConfigCheck: &privateClusterConfigCheck{
-				expectBlockExists:                   true,
+				expectBlockExists:                      true,
 				expectPrivateEndpointSubnetworkRemoved: true,
-				expectOtherAttributeUnchanged:       stringPtr("enable_private_endpoint"),
+				expectOtherAttributeUnchanged:          stringPtr("enable_private_endpoint"),
 			},
 		},
 	}
@@ -1223,7 +1017,7 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 				}
 				t.Fatalf("ApplyRules(rules.MasterCIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
 			}
-			
+
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyRules(rules.MasterCIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
 					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
@@ -1325,23 +1119,31 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 
 			if tc.name == "MultipleGKEResources_OneMatch" {
 				gkeTwo, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two_no_master_cidr")
-				if gkeTwo == nil {t.Fatalf("GKE resource 'gke_two_no_master_cidr' not found in multi-resource test.")}
+				if gkeTwo == nil {
+					t.Fatalf("GKE resource 'gke_two_no_master_cidr' not found in multi-resource test.")
+				}
 				if gkeTwo.Body().GetAttribute("master_ipv4_cidr_block") != nil {
 					t.Errorf("'master_ipv4_cidr_block' unexpectedly present in 'gke_two_no_master_cidr'.")
 				}
 				pccTwo := gkeTwo.Body().FirstMatchingBlock("private_cluster_config", nil)
-				if pccTwo == nil {t.Fatalf("'private_cluster_config' missing in 'gke_two_no_master_cidr'.")}
+				if pccTwo == nil {
+					t.Fatalf("'private_cluster_config' missing in 'gke_two_no_master_cidr'.")
+				}
 				if pccTwo.Body().GetAttribute("private_endpoint_subnetwork") == nil {
 					t.Errorf("'private_endpoint_subnetwork' unexpectedly missing from 'gke_two_no_master_cidr'.")
 				}
 
 				gkeThree, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_three_no_subnetwork")
-				if gkeThree == nil {t.Fatalf("GKE resource 'gke_three_no_subnetwork' not found in multi-resource test.")}
+				if gkeThree == nil {
+					t.Fatalf("GKE resource 'gke_three_no_subnetwork' not found in multi-resource test.")
+				}
 				if gkeThree.Body().GetAttribute("master_ipv4_cidr_block") == nil {
 					t.Errorf("'master_ipv4_cidr_block' unexpectedly missing from 'gke_three_no_subnetwork'.")
 				}
 				pccThree := gkeThree.Body().FirstMatchingBlock("private_cluster_config", nil)
-				if pccThree == nil {t.Fatalf("'private_cluster_config' missing in 'gke_three_no_subnetwork'.")}
+				if pccThree == nil {
+					t.Fatalf("'private_cluster_config' missing in 'gke_three_no_subnetwork'.")
+				}
 				if pccThree.Body().GetAttribute("private_endpoint_subnetwork") != nil {
 					t.Errorf("'private_endpoint_subnetwork' unexpectedly present in 'gke_three_no_subnetwork'.")
 				}
@@ -1376,12 +1178,12 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
 
 	tests := []struct {
-		name                               string
-		hclContent                         string
-		expectedModifications              int
-		expectEnabledAttributeRemoved      bool
-		resourceLabelsToVerify             []string
-		binaryAuthorizationShouldExist     bool
+		name                                  string
+		hclContent                            string
+		expectedModifications                 int
+		expectEnabledAttributeRemoved         bool
+		resourceLabelsToVerify                []string
+		binaryAuthorizationShouldExist        bool
 		binaryAuthorizationShouldHaveEvalMode bool
 	}{
 		{
@@ -1393,10 +1195,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
     evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
   }
 }`,
-			expectedModifications:           1,
-			expectEnabledAttributeRemoved:   true,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 1,
+			expectEnabledAttributeRemoved:         true,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
@@ -1407,10 +1209,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
     enabled = true
   }
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
@@ -1421,10 +1223,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
     evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
   }
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
@@ -1435,10 +1237,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
     some_other_attr = "value"
   }
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
@@ -1447,10 +1249,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
   name = "primary-cluster"
   binary_authorization {}
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
@@ -1459,10 +1261,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
   name     = "primary-cluster"
   location = "us-central1"
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "primary"},
-			binaryAuthorizationShouldExist:  false,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
+			binaryAuthorizationShouldExist:        false,
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
@@ -1474,10 +1276,10 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
     evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
   }
 }`,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          []string{"google_compute_instance", "default"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                []string{"google_compute_instance", "default"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
@@ -1495,19 +1297,19 @@ resource "google_container_cluster" "gke_two" {
     evaluation_mode = "DISABLED"
   }
 }`,
-			expectedModifications:           1,
-			expectEnabledAttributeRemoved:   true,
-			resourceLabelsToVerify:          []string{"google_container_cluster", "gke_one"},
-			binaryAuthorizationShouldExist:  true,
+			expectedModifications:                 1,
+			expectEnabledAttributeRemoved:         true,
+			resourceLabelsToVerify:                []string{"google_container_cluster", "gke_one"},
+			binaryAuthorizationShouldExist:        true,
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
-			name: "Empty HCL content",
-			hclContent: ``,
-			expectedModifications:           0,
-			expectEnabledAttributeRemoved:   false,
-			resourceLabelsToVerify:          nil,
-			binaryAuthorizationShouldExist:  false,
+			name:                                  "Empty HCL content",
+			hclContent:                            ``,
+			expectedModifications:                 0,
+			expectEnabledAttributeRemoved:         false,
+			resourceLabelsToVerify:                nil,
+			binaryAuthorizationShouldExist:        false,
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 	}
@@ -1799,8 +1601,8 @@ resource "google_container_cluster" "beta" {
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Empty HCL content",
-			hclContent: ``,
+			name:                                  "Empty HCL content",
+			hclContent:                            ``,
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                nil,
@@ -1908,7 +1710,7 @@ resource "google_container_cluster" "beta" {
 								originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
 								var originalIpAllocBlock *hclwrite.Block
 								if originalResourceBlock != nil {
-                                    originalIpAllocBlock = originalResourceBlock.Body().FirstMatchingBlock("ip_allocation_policy", nil)
+									originalIpAllocBlock = originalResourceBlock.Body().FirstMatchingBlock("ip_allocation_policy", nil)
 								}
 
 								if originalIpAllocBlock != nil && originalIpAllocBlock.Body().GetAttribute("services_ipv4_cidr_block") != nil {
@@ -2073,8 +1875,8 @@ resource "google_container_cluster" "secondary" {
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Empty HCL content",
-			hclContent: ``,
+			name:                         "Empty HCL content",
+			hclContent:                   ``,
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       nil,
@@ -2161,14 +1963,14 @@ resource "google_container_cluster" "secondary" {
 					} else {
 						if tc.name == "Non-matching resource type (google_compute_instance)" {
 							originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
-                            originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
+							originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
 							var originalBlockHasIt bool
-                            if originalResourceBlock != nil && originalResourceBlock.Body().GetAttribute("cluster_ipv4_cidr") != nil {
-                                originalBlockHasIt = true
-                            }
+							if originalResourceBlock != nil && originalResourceBlock.Body().GetAttribute("cluster_ipv4_cidr") != nil {
+								originalBlockHasIt = true
+							}
 							if originalBlockHasIt && !hasClusterIPV4CIDR {
-										t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. Modified HCL:\n%s",
-											blockType, blockName, string(modifiedContentBytes))
+								t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. Modified HCL:\n%s",
+									blockType, blockName, string(modifiedContentBytes))
 							}
 						}
 					}
@@ -2195,10 +1997,10 @@ func TestApplyAutopilotRule(t *testing.T) {
 	logger := zap.NewNop()
 
 	type clusterAutoscalingChecks struct {
-		expectBlockExists       bool
-		expectEnabledRemoved    bool
+		expectBlockExists           bool
+		expectEnabledRemoved        bool
 		expectResourceLimitsRemoved bool
-		expectProfileUnchanged  *string
+		expectProfileUnchanged      *string
 	}
 
 	type binaryAuthorizationChecks struct {
@@ -2207,10 +2009,10 @@ func TestApplyAutopilotRule(t *testing.T) {
 	}
 
 	type addonsConfigChecks struct {
-		expectBlockExists            bool
-		expectNetworkPolicyRemoved   bool
-		expectDnsCacheRemoved        bool
-		expectStatefulHaRemoved      bool
+		expectBlockExists                bool
+		expectNetworkPolicyRemoved       bool
+		expectDnsCacheRemoved            bool
+		expectStatefulHaRemoved          bool
 		expectHttpLoadBalancingUnchanged bool
 	}
 
@@ -2278,7 +2080,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     enabled = true
   }
 }`,
-			expectedModifications: 14,
+			expectedModifications:     14,
 			clusterName:               "autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved: []string{
@@ -2293,17 +2095,17 @@ func TestApplyAutopilotRule(t *testing.T) {
 				"node_pool",
 			},
 			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:            true,
-				expectNetworkPolicyRemoved:   true,
-				expectDnsCacheRemoved:        true,
-				expectStatefulHaRemoved:      true,
+				expectBlockExists:                true,
+				expectNetworkPolicyRemoved:       true,
+				expectDnsCacheRemoved:            true,
+				expectStatefulHaRemoved:          true,
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:       true,
-				expectEnabledRemoved:    true,
+				expectBlockExists:           true,
+				expectEnabledRemoved:        true,
 				expectResourceLimitsRemoved: true,
-				expectProfileUnchanged:  stringPtr("OPTIMIZE_UTILIZATION"),
+				expectProfileUnchanged:      stringPtr("OPTIMIZE_UTILIZATION"),
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
@@ -2333,21 +2135,21 @@ func TestApplyAutopilotRule(t *testing.T) {
     }
   }
 }`,
-			expectedModifications:     1,
-			clusterName:               "standard_cluster",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsRemoved:  []string{},
+			expectedModifications:               1,
+			clusterName:                         "standard_cluster",
+			expectEnableAutopilotAttr:           nil,
+			expectedRootAttrsRemoved:            []string{},
 			expectedTopLevelNestedBlocksRemoved: []string{},
 			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:            true,
-				expectDnsCacheRemoved:        false,
+				expectBlockExists:                true,
+				expectDnsCacheRemoved:            false,
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:       true,
-				expectEnabledRemoved:    false,
+				expectBlockExists:           true,
+				expectEnabledRemoved:        false,
 				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:  stringPtr("BALANCED"),
+				expectProfileUnchanged:      stringPtr("BALANCED"),
 			},
 			binaryAuthorization:  nil,
 			expectNoOtherChanges: true,
@@ -2367,16 +2169,16 @@ func TestApplyAutopilotRule(t *testing.T) {
     }
   }
 }`,
-			expectedModifications:     0,
-			clusterName:               "existing_cluster",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsRemoved:  []string{},
+			expectedModifications:               0,
+			clusterName:                         "existing_cluster",
+			expectEnableAutopilotAttr:           nil,
+			expectedRootAttrsRemoved:            []string{},
 			expectedTopLevelNestedBlocksRemoved: []string{},
 			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:            true,
-				expectNetworkPolicyRemoved:   false,
+				expectBlockExists:          true,
+				expectNetworkPolicyRemoved: false,
 			},
-			expectNoOtherChanges:      true,
+			expectNoOtherChanges: true,
 		},
 		{
 			name: "enable_autopilot is true, no conflicting fields present",
@@ -2394,20 +2196,20 @@ func TestApplyAutopilotRule(t *testing.T) {
     evaluation_mode = "DISABLED"
   }
 }`,
-			expectedModifications:     0,
-			clusterName:               "clean_autopilot_cluster",
-			expectEnableAutopilotAttr: boolPtr(true),
-			expectedRootAttrsRemoved:  []string{},
+			expectedModifications:               0,
+			clusterName:                         "clean_autopilot_cluster",
+			expectEnableAutopilotAttr:           boolPtr(true),
+			expectedRootAttrsRemoved:            []string{},
 			expectedTopLevelNestedBlocksRemoved: []string{},
 			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:            true,
+				expectBlockExists:                true,
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:       true,
-				expectEnabledRemoved:    false,
+				expectBlockExists:           true,
+				expectEnabledRemoved:        false,
 				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:  stringPtr("BALANCED"),
+				expectProfileUnchanged:      stringPtr("BALANCED"),
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
@@ -2426,16 +2228,16 @@ func TestApplyAutopilotRule(t *testing.T) {
     dns_cache_config { enabled = true }
   }
 }`,
-			expectedModifications:     1, // Changed from 0 to 1
-			clusterName:               "invalid_autopilot_cluster",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsRemoved:  []string{"enable_autopilot"}, // Added "enable_autopilot"
+			expectedModifications:               1, // Changed from 0 to 1
+			clusterName:                         "invalid_autopilot_cluster",
+			expectEnableAutopilotAttr:           nil,
+			expectedRootAttrsRemoved:            []string{"enable_autopilot"}, // Added "enable_autopilot"
 			expectedTopLevelNestedBlocksRemoved: []string{},
 			addonsConfig: &addonsConfigChecks{
 				expectBlockExists:     true,
 				expectDnsCacheRemoved: false,
 			},
-			expectNoOtherChanges:      true,
+			expectNoOtherChanges: true,
 		},
 		{
 			name: "No google_container_cluster blocks",
@@ -2447,11 +2249,11 @@ func TestApplyAutopilotRule(t *testing.T) {
 			expectNoOtherChanges:  true,
 		},
 		{
-			name:                      "Empty HCL content",
-			hclContent:                ``,
-			expectedModifications:     0,
-			clusterName:               "",
-			expectNoOtherChanges:      true,
+			name:                  "Empty HCL content",
+			hclContent:            ``,
+			expectedModifications: 0,
+			clusterName:           "",
+			expectNoOtherChanges:  true,
 		},
 		{
 			name: "Autopilot true, only some attributes to remove",
@@ -2461,12 +2263,12 @@ func TestApplyAutopilotRule(t *testing.T) {
   enable_shielded_nodes = true
   default_max_pods_per_node = 110
 }`,
-			expectedModifications:     2,
-			clusterName:               "partial_autopilot",
-			expectEnableAutopilotAttr: boolPtr(true),
-			expectedRootAttrsRemoved:  []string{"enable_shielded_nodes", "default_max_pods_per_node"},
+			expectedModifications:               2,
+			clusterName:                         "partial_autopilot",
+			expectEnableAutopilotAttr:           boolPtr(true),
+			expectedRootAttrsRemoved:            []string{"enable_shielded_nodes", "default_max_pods_per_node"},
 			expectedTopLevelNestedBlocksRemoved: []string{},
-			expectNoOtherChanges:      false,
+			expectNoOtherChanges:                false,
 		},
 	}
 
@@ -2518,9 +2320,8 @@ func TestApplyAutopilotRule(t *testing.T) {
 			var clusterBlock *hclwrite.Block
 			clusterBlock, _ = findBlockInParsedFile(modifier.File(), "google_container_cluster", tc.clusterName)
 
-
 			if clusterBlock == nil {
-				if tc.expectedModifications > 0 || (tc.addonsConfig != nil && tc.addonsConfig.expectBlockExists) || (tc.clusterAutoscaling != nil && tc.clusterAutoscaling.expectBlockExists) || (tc.binaryAuthorization != nil && tc.binaryAuthorization.expectBlockExists)  {
+				if tc.expectedModifications > 0 || (tc.addonsConfig != nil && tc.addonsConfig.expectBlockExists) || (tc.clusterAutoscaling != nil && tc.clusterAutoscaling.expectBlockExists) || (tc.binaryAuthorization != nil && tc.binaryAuthorization.expectBlockExists) {
 					t.Fatalf("google_container_cluster resource '%s' not found after ApplyAutopilotRule. HCL:\n%s", tc.clusterName, string(modifier.File().Bytes()))
 				}
 				return
@@ -2545,16 +2346,16 @@ func TestApplyAutopilotRule(t *testing.T) {
 							t.Errorf("Expected 'enable_autopilot' to be %v, but got %v. Modified HCL:\n%s", *tc.expectEnableAutopilotAttr, val.True(), string(modifier.File().Bytes()))
 						}
 					} else {
-                        t.Errorf("Expected 'enable_autopilot' to be boolean, but got type %s. Modified HCL:\n%s", val.Type().FriendlyName(), string(modifier.File().Bytes()))
-                    }
+						t.Errorf("Expected 'enable_autopilot' to be boolean, but got type %s. Modified HCL:\n%s", val.Type().FriendlyName(), string(modifier.File().Bytes()))
+					}
 				}
 			}
-            if tc.name == "enable_autopilot is not a boolean" && enableAutopilotAttr != nil {
-                 exprBytes := enableAutopilotAttr.Expr().BuildTokens(nil).Bytes()
-                 if string(exprBytes) != `"not_a_boolean"` {
-                    t.Errorf("Expected 'enable_autopilot' to remain as \"not_a_boolean\", got %s. Modified HCL:\n%s", string(exprBytes), string(modifier.File().Bytes()))
-                 }
-            }
+			if tc.name == "enable_autopilot is not a boolean" && enableAutopilotAttr != nil {
+				exprBytes := enableAutopilotAttr.Expr().BuildTokens(nil).Bytes()
+				if string(exprBytes) != `"not_a_boolean"` {
+					t.Errorf("Expected 'enable_autopilot' to remain as \"not_a_boolean\", got %s. Modified HCL:\n%s", string(exprBytes), string(modifier.File().Bytes()))
+				}
+			}
 
 			for _, attrName := range tc.expectedRootAttrsRemoved {
 				if attr := clusterBlock.Body().GetAttribute(attrName); attr != nil {
@@ -2822,7 +2623,7 @@ resource "aws_instance" "main" {}
 			if err := tmpFile.Close(); err != nil {
 				t.Fatalf("Failed to close temp file: %v", err)
 			}
-			
+
 			modifier, newFromFileErr := NewFromFile(tmpFile.Name(), logger)
 
 			if tc.hclContent == "" {
@@ -2856,11 +2657,10 @@ resource "aws_instance" "main" {}
 					foundBlockInVerified = verifiedFile.Body().FirstMatchingBlock(tc.blockType, tc.blockLabels)
 				}
 			} else { // Resource or Data blocks
-                if len(tc.blockLabels) > 0 { // Should always be true for resource/data
-				    foundBlockInVerified, _ = findBlockInParsedFile(verifiedFile, tc.blockLabels[0], tc.blockLabels[1])
-                }
+				if len(tc.blockLabels) > 0 { // Should always be true for resource/data
+					foundBlockInVerified, _ = findBlockInParsedFile(verifiedFile, tc.blockLabels[0], tc.blockLabels[1])
+				}
 			}
-
 
 			if tc.expectRemoved {
 				if foundBlockInVerified != nil {
@@ -2870,18 +2670,18 @@ resource "aws_instance" "main" {}
 				initialParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
 				initialBlockPresent := false
 				if initialParsedFile != nil && initialParsedFile.Body() != nil {
-                    var initialBlock *hclwrite.Block
-                    if !(tc.blockType == "resource" || tc.blockType == "data") {
-                        if len(tc.blockLabels) == 0 {
-                            initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, nil)
-                        } else {
-                            initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, tc.blockLabels)
-                        }
-                    } else {
-                        if len(tc.blockLabels) > 0 {
-						    initialBlock, _ = findBlockInParsedFile(initialParsedFile, tc.blockLabels[0], tc.blockLabels[1])
-                        }
-                    }
+					var initialBlock *hclwrite.Block
+					if !(tc.blockType == "resource" || tc.blockType == "data") {
+						if len(tc.blockLabels) == 0 {
+							initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, nil)
+						} else {
+							initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, tc.blockLabels)
+						}
+					} else {
+						if len(tc.blockLabels) > 0 {
+							initialBlock, _ = findBlockInParsedFile(initialParsedFile, tc.blockLabels[0], tc.blockLabels[1])
+						}
+					}
 					if initialBlock != nil {
 						initialBlockPresent = true
 					}
@@ -2889,7 +2689,7 @@ resource "aws_instance" "main" {}
 
 				if tc.expectCallError { // Error was expected, so block should remain if it was there
 					if initialBlockPresent && foundBlockInVerified == nil {
-						 t.Errorf("RemoveBlock() errored as expected for %s %v, but block was unexpectedly removed. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
+						t.Errorf("RemoveBlock() errored as expected for %s %v, but block was unexpectedly removed. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
 					}
 					if !initialBlockPresent && foundBlockInVerified != nil {
 						t.Errorf("RemoveBlock() logic error: block %s %v not present initially, call errored, but block now found. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
@@ -2899,8 +2699,8 @@ resource "aws_instance" "main" {}
 						t.Errorf("RemoveBlock() did not error, expected block %s %v NOT to be removed, but it was. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
 					}
 					if !initialBlockPresent && foundBlockInVerified != nil {
-                        t.Errorf("RemoveBlock() logic error: block %s %v was not present initially, no call error, but was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
-                    }
+						t.Errorf("RemoveBlock() logic error: block %s %v was not present initially, no call error, but was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
+					}
 				}
 			}
 		})
@@ -2955,10 +2755,10 @@ func findNodePoolInBlock(resourceBlock *hclwrite.Block, nodePoolName string, mod
 					return nb, nil
 				}
 			} else if nameAttr == nil && nodePoolName != "" {
-                continue
-            } else if nameAttr == nil && nodePoolName == "" {
-                return nb, nil
-            }
+				continue
+			} else if nameAttr == nil && nodePoolName == "" {
+				return nb, nil
+			}
 		}
 	}
 	if nodePoolName == "" {
@@ -3129,7 +2929,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 		hclContent            string
 		expectedHCLContent    string
 		expectedModifications int
-			ruleToApply           types.Rule // This should be types.Rule
+		ruleToApply           types.Rule // This should be types.Rule
 	}{
 		{
 			name: "monitoring_service should be removed when monitoring_config block exists",
