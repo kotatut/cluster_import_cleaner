@@ -33,16 +33,19 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 		"default_max_pods_per_node",
 		"enable_intranode_visibility",
 	}
-	topLevelNestedBlocksToRemoveWhenTrue := []string{"network_policy"} // node_pool handled separately
+	topLevelNestedBlocksToRemoveWhenTrue := []string{
+		"network_policy",
+		"cluster_autoscaling",
+		"node_config",
+	} // node_pool handled separately
 
 	addonsConfigSubBlocksToRemoveWhenTrue := []string{
 		"network_policy_config",
 		"dns_cache_config",
 		"stateful_ha_config",
 	}
-	clusterAutoscalingAttributesToRemoveWhenTrue := []string{"enabled"}
-	// "resource_limits" is a block within cluster_autoscaling and could be repeated 3 times
-	clusterAutoscalingSubBlocksToRemoveWhenTrue := []string{"resource_limits", "resource_limits", "resource_limits"}
+	// cluster_autoscaling block is now removed entirely if present.
+	// node_config block is now removed entirely if present.
 
 	binaryAuthorizationAttributesToRemoveWhenTrue := []string{"enabled"}
 
@@ -176,6 +179,7 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						if existingSubBlock, _ := m.GetNestedBlock(addonsConfigBlock.Body(), []string{subBlockName}); existingSubBlock != nil {
 							if errRemove := m.RemoveNestedBlockByPath(addonsConfigBlock.Body(), []string{subBlockName}); errRemove != nil {
 								resLogger.Error("Error removing sub-block from 'addons_config'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
+								// Only assign to firstError if it's not already set, to capture the first actual removal error.
 								if firstError == nil {
 									firstError = errRemove
 								}
@@ -186,41 +190,14 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						}
 					}
 				} else if errGetAddons != nil && len(addonsConfigSubBlocksToRemoveWhenTrue) > 0 {
+					// If 'addons_config' block itself is not found, errGetAddons contains this info.
+					// This is logged for debug purposes only and does not set firstError, as per requirements
+					// for optional parent blocks.
 					resLogger.Debug("'addons_config' block not found, skipping removal of its sub-blocks.", zap.Error(errGetAddons))
 				}
 
-				// Handle cluster_autoscaling attributes and sub-blocks
-				if caBlock, errGetCA := m.GetNestedBlock(block.Body(), []string{"cluster_autoscaling"}); errGetCA == nil && caBlock != nil {
-					resLogger.Debug("Processing 'cluster_autoscaling'.")
-					for _, attrName := range clusterAutoscalingAttributesToRemoveWhenTrue {
-						if _, existingAttr, _ := m.GetAttributeValueByPath(caBlock.Body(), []string{attrName}); existingAttr != nil {
-							if errRemove := m.RemoveAttributeByPath(caBlock.Body(), []string{attrName}); errRemove != nil {
-								resLogger.Error("Error removing attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName), zap.Error(errRemove))
-								if firstError == nil {
-									firstError = errRemove
-								}
-							} else {
-								modificationCount++
-								resLogger.Info("Removed attribute from 'cluster_autoscaling'.", zap.String("attributeName", attrName))
-							}
-						}
-					}
-					for _, subBlockName := range clusterAutoscalingSubBlocksToRemoveWhenTrue {
-						if existingSubBlock, _ := m.GetNestedBlock(caBlock.Body(), []string{subBlockName}); existingSubBlock != nil {
-							if errRemove := m.RemoveNestedBlockByPath(caBlock.Body(), []string{subBlockName}); errRemove != nil {
-								resLogger.Error("Error removing sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName), zap.Error(errRemove))
-								if firstError == nil {
-									firstError = errRemove
-								}
-							} else {
-								modificationCount++
-								resLogger.Info("Removed sub-block from 'cluster_autoscaling'.", zap.String("subBlockName", subBlockName))
-							}
-						}
-					}
-				} else if errGetCA != nil && (len(clusterAutoscalingAttributesToRemoveWhenTrue) > 0 || len(clusterAutoscalingSubBlocksToRemoveWhenTrue) > 0) {
-					resLogger.Debug("'cluster_autoscaling' block not found.", zap.Error(errGetCA))
-				}
+				// cluster_autoscaling is now handled by the topLevelNestedBlocksToRemoveWhenTrue loop.
+				// node_config is now handled by the topLevelNestedBlocksToRemoveWhenTrue loop.
 
 				// Handle binary_authorization attributes
 				if baBlock, errGetBA := m.GetNestedBlock(block.Body(), []string{"binary_authorization"}); errGetBA == nil && baBlock != nil {
@@ -229,6 +206,7 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						if _, existingAttr, _ := m.GetAttributeValueByPath(baBlock.Body(), []string{attrName}); existingAttr != nil {
 							if errRemove := m.RemoveAttributeByPath(baBlock.Body(), []string{attrName}); errRemove != nil {
 								resLogger.Error("Error removing attribute from 'binary_authorization'.", zap.String("attributeName", attrName), zap.Error(errRemove))
+								// Only assign to firstError if it's not already set, to capture the first actual removal error.
 								if firstError == nil {
 									firstError = errRemove
 								}
@@ -239,6 +217,8 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 						}
 					}
 				} else if errGetBA != nil && len(binaryAuthorizationAttributesToRemoveWhenTrue) > 0 {
+					// If 'binary_authorization' block itself is not found, errGetBA contains this info.
+					// This is logged for debug purposes only and does not set firstError.
 					resLogger.Debug("'binary_authorization' block not found.", zap.Error(errGetBA))
 				}
 			}

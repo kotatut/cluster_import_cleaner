@@ -166,6 +166,171 @@ func TestEnhancedAttributeValueEquals(t *testing.T) {
 	}
 }
 
+func TestApplyPodIPV4CIDRRule(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	tests := []struct {
+		name                               string
+		hclContent                         string
+		expectedModifications              int
+		expectClusterIPV4CIDRBlockRemoved  bool
+		resourceLabelsToVerify             []string
+		ipAllocationPolicyShouldExist      bool
+		clusterSecondaryRangeNameShouldExist bool // Added for clarity in assertions
+	}{
+		{
+			name: "Both pod CIDR attributes present",
+			hclContent: `resource "google_container_cluster" "test_cluster" {
+  name = "test-cluster"
+  location = "us-central1"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block    = "10.1.0.0/16"
+    cluster_secondary_range_name = "mypods"
+  }
+}`,
+			expectedModifications:              1,
+			expectClusterIPV4CIDRBlockRemoved:  true,
+			resourceLabelsToVerify:             []string{"google_container_cluster", "test_cluster"},
+			ipAllocationPolicyShouldExist:      true,
+			clusterSecondaryRangeNameShouldExist: true,
+		},
+		{
+			name: "Only cluster_ipv4_cidr_block present",
+			hclContent: `resource "google_container_cluster" "test_cluster" {
+  name = "test-cluster"
+  location = "us-central1"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block = "10.1.0.0/16"
+  }
+}`,
+			expectedModifications:              0,
+			expectClusterIPV4CIDRBlockRemoved:  false,
+			resourceLabelsToVerify:             []string{"google_container_cluster", "test_cluster"},
+			ipAllocationPolicyShouldExist:      true,
+			clusterSecondaryRangeNameShouldExist: false,
+		},
+		{
+			name: "Only cluster_secondary_range_name present",
+			hclContent: `resource "google_container_cluster" "test_cluster" {
+  name = "test-cluster"
+  location = "us-central1"
+  ip_allocation_policy {
+    cluster_secondary_range_name = "mypods"
+  }
+}`,
+			expectedModifications:              0,
+			expectClusterIPV4CIDRBlockRemoved:  false,
+			resourceLabelsToVerify:             []string{"google_container_cluster", "test_cluster"},
+			ipAllocationPolicyShouldExist:      true,
+			clusterSecondaryRangeNameShouldExist: true,
+		},
+		{
+			name: "ip_allocation_policy exists but is empty",
+			hclContent: `resource "google_container_cluster" "test_cluster" {
+  name = "test-cluster"
+  location = "us-central1"
+  ip_allocation_policy {
+    some_other_config = "value"
+  }
+}`,
+			expectedModifications:              0,
+			expectClusterIPV4CIDRBlockRemoved:  false,
+			resourceLabelsToVerify:             []string{"google_container_cluster", "test_cluster"},
+			ipAllocationPolicyShouldExist:      true,
+			clusterSecondaryRangeNameShouldExist: false,
+		},
+		{
+			name: "ip_allocation_policy does not exist",
+			hclContent: `resource "google_container_cluster" "test_cluster" {
+  name = "test-cluster"
+  location = "us-central1"
+}`,
+			expectedModifications:              0,
+			expectClusterIPV4CIDRBlockRemoved:  false,
+			resourceLabelsToVerify:             []string{"google_container_cluster", "test_cluster"},
+			ipAllocationPolicyShouldExist:      false,
+			clusterSecondaryRangeNameShouldExist: false,
+		},
+		{
+			name: "Non-GKE resource, no change",
+			hclContent: `resource "google_compute_instance" "test_instance" {
+  name = "test-instance"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block    = "10.1.0.0/16"
+    cluster_secondary_range_name = "mypods"
+  }
+}`,
+			expectedModifications:              0,
+			expectClusterIPV4CIDRBlockRemoved:  false,
+			resourceLabelsToVerify:             []string{"google_compute_instance", "test_instance"},
+			ipAllocationPolicyShouldExist:      true, // Block exists, but rule shouldn't run on this resource type
+			clusterSecondaryRangeNameShouldExist: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "test_pod_ipv4_cidr_*.hcl")
+			assert.NoError(t, err, "Failed to create temp file")
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.Write([]byte(tc.hclContent))
+			assert.NoError(t, err, "Failed to write to temp file")
+			err = tmpFile.Close()
+			assert.NoError(t, err, "Failed to close temp file")
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			assert.NoError(t, err, "NewFromFile() error")
+
+			modifications, errs := modifier.ApplyRules([]types.Rule{rules.PodIPV4CIDRRuleDefinition})
+			assert.Empty(t, errs, "ApplyRules should not return errors for these test cases")
+			assert.Equal(t, tc.expectedModifications, modifications, "Modification count mismatch")
+
+			// Verify attribute state
+			resourceBlock, _ := modifier.GetBlock("resource", tc.resourceLabelsToVerify)
+			if resourceBlock == nil && tc.ipAllocationPolicyShouldExist { // Only fail if we expected to find the block
+				t.Fatalf("Resource block %v not found", tc.resourceLabelsToVerify)
+			}
+
+			if resourceBlock != nil {
+				ipAllocPolicyBlock, _ := modifier.GetNestedBlock(resourceBlock.Body(), []string{"ip_allocation_policy"})
+				if tc.ipAllocationPolicyShouldExist {
+					assert.NotNil(t, ipAllocPolicyBlock, "ip_allocation_policy block should exist")
+					if ipAllocPolicyBlock != nil {
+						_, attrClusterCIDR, _ := modifier.GetAttributeValueByPath(ipAllocPolicyBlock.Body(), []string{"cluster_ipv4_cidr_block"})
+						if tc.expectClusterIPV4CIDRBlockRemoved {
+							assert.Nil(t, attrClusterCIDR, "'cluster_ipv4_cidr_block' should have been removed")
+						} else {
+							// Check if original HCL had it before asserting it should still exist
+							originalFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+							originalResourceBlock, _ := findBlockInParsedFile(originalFile, tc.resourceLabelsToVerify[0], tc.resourceLabelsToVerify[1])
+							if originalResourceBlock != nil {
+								originalIpAlloc, _ := modifier.GetNestedBlock(originalResourceBlock.Body(), []string{"ip_allocation_policy"})
+								if originalIpAlloc != nil {
+									_, originalAttr, _ := modifier.GetAttributeValueByPath(originalIpAlloc.Body(), []string{"cluster_ipv4_cidr_block"})
+									if originalAttr != nil { // Only assert if it was there originally
+										assert.NotNil(t, attrClusterCIDR, "'cluster_ipv4_cidr_block' should still exist")
+									}
+								}
+							}
+						}
+
+						_, attrSecondaryRange, _ := modifier.GetAttributeValueByPath(ipAllocPolicyBlock.Body(), []string{"cluster_secondary_range_name"})
+						if tc.clusterSecondaryRangeNameShouldExist {
+							assert.NotNil(t, attrSecondaryRange, "'cluster_secondary_range_name' should exist")
+						} else {
+							assert.Nil(t, attrSecondaryRange, "'cluster_secondary_range_name' should not exist")
+						}
+					}
+				} else {
+					assert.Nil(t, ipAllocPolicyBlock, "ip_allocation_policy block should not exist")
+				}
+			}
+		})
+	}
+}
+
 func TestApplySetMinVersionRule(t *testing.T) {
 	logger := zap.NewNop()
 	tests := []struct {
@@ -1997,10 +2162,10 @@ func TestApplyAutopilotRule(t *testing.T) {
 	logger := zap.NewNop()
 
 	type clusterAutoscalingChecks struct {
-		expectBlockExists           bool
-		expectEnabledRemoved        bool
-		expectResourceLimitsRemoved bool
-		expectProfileUnchanged      *string
+		expectBlockExists           bool // For cluster_autoscaling block itself
+		// expectEnabledRemoved and expectResourceLimitsRemoved are no longer needed
+		// as the entire block is removed or kept.
+		expectProfileUnchanged *string // This can still be checked if the block is NOT removed.
 	}
 
 	type binaryAuthorizationChecks struct {
@@ -2041,6 +2206,11 @@ func TestApplyAutopilotRule(t *testing.T) {
   default_max_pods_per_node     = 110
   enable_intranode_visibility   = true
 
+  node_config { // Added node_config as per test requirements
+    machine_type = "e2-medium"
+    disk_size_gb = 30
+  }
+
   addons_config {
     network_policy_config {
       disabled = false
@@ -2080,7 +2250,9 @@ func TestApplyAutopilotRule(t *testing.T) {
     enabled = true
   }
 }`,
-			expectedModifications:     14,
+			expectedModifications:     14, // Original: 5 root attrs, 3 addons_config, 1 network_policy, 2 node_pools, 2 cluster_autoscaling (enabled, resource_limits), 1 binary_auth. Total 14.
+			                               // New: 5 root attrs, 3 addons_config, 1 network_policy, 2 node_pools, 1 cluster_autoscaling (block), 1 node_config (block), 1 binary_auth. Total 14.
+			                               // The count remains the same.
 			clusterName:               "autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved: []string{
@@ -2092,7 +2264,9 @@ func TestApplyAutopilotRule(t *testing.T) {
 			},
 			expectedTopLevelNestedBlocksRemoved: []string{
 				"network_policy",
-				"node_pool",
+				"node_pool", // This will catch both node_pool blocks
+				"cluster_autoscaling",
+				"node_config",
 			},
 			addonsConfig: &addonsConfigChecks{
 				expectBlockExists:                true,
@@ -2101,11 +2275,11 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectStatefulHaRemoved:          true,
 				expectHttpLoadBalancingUnchanged: true,
 			},
-			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,
-				expectEnabledRemoved:        true,
-				expectResourceLimitsRemoved: true,
-				expectProfileUnchanged:      stringPtr("OPTIMIZE_UTILIZATION"),
+			clusterAutoscaling: &clusterAutoscalingChecks{ // This struct might need re-evaluation as the whole block is removed
+				expectBlockExists: false, // Now we expect the block to be gone
+				// expectEnabledRemoved:        true, // No longer relevant
+				// expectResourceLimitsRemoved: true, // No longer relevant
+				// expectProfileUnchanged:      stringPtr("OPTIMIZE_UTILIZATION"), // No longer relevant if block is gone
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
@@ -2135,21 +2309,19 @@ func TestApplyAutopilotRule(t *testing.T) {
     }
   }
 }`,
-			expectedModifications:               0,
+			expectedModifications:               0, // RuleHandleAutopilotFalse handles the removal of enable_autopilot=false
 			clusterName:                         "standard_cluster",
-			expectEnableAutopilotAttr:           nil,
+			expectEnableAutopilotAttr:           nil, // Attribute itself will be removed by RuleHandleAutopilotFalse, not this function
 			expectedRootAttrsRemoved:            []string{},
 			expectedTopLevelNestedBlocksRemoved: []string{},
 			addonsConfig: &addonsConfigChecks{
 				expectBlockExists:                true,
-				expectDnsCacheRemoved:            false,
+				expectDnsCacheRemoved:            false, // Not removed when autopilot=false
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,
-				expectEnabledRemoved:        false,
-				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:      stringPtr("BALANCED"),
+				expectBlockExists:      true,  // Not removed when autopilot=false
+				expectProfileUnchanged: stringPtr("BALANCED"),
 			},
 			binaryAuthorization:  nil,
 			expectNoOtherChanges: true,
@@ -2206,10 +2378,8 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,
-				expectEnabledRemoved:        false,
-				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:      stringPtr("BALANCED"),
+				expectBlockExists:      true, // Not removed when autopilot=true and no conflicting fields
+				expectProfileUnchanged: stringPtr("BALANCED"),
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
@@ -2268,7 +2438,33 @@ func TestApplyAutopilotRule(t *testing.T) {
 			expectEnableAutopilotAttr:           boolPtr(true),
 			expectedRootAttrsRemoved:            []string{"enable_shielded_nodes", "default_max_pods_per_node"},
 			expectedTopLevelNestedBlocksRemoved: []string{},
-			expectNoOtherChanges:                false,
+			expectNoOtherChanges:                false, // Specific checks for removed attributes are done
+		},
+		{
+			name: "Autopilot true, only cluster_autoscaling and node_config",
+			hclContent: `resource "google_container_cluster" "autopilot_ca_nc_test" {
+  name             = "ap-ca-nc"
+  enable_autopilot = true
+  location         = "us-central1"
+  cluster_autoscaling {
+    enabled = true
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+  }
+  node_config {
+    machine_type = "e2-standard-2"
+  }
+}`,
+			expectedModifications:               2, // cluster_autoscaling block and node_config block
+			clusterName:                         "autopilot_ca_nc_test",
+			expectEnableAutopilotAttr:           boolPtr(true),
+			expectedRootAttrsRemoved:            []string{},
+			expectedTopLevelNestedBlocksRemoved: []string{"cluster_autoscaling", "node_config"},
+			addonsConfig:                        nil, // No addons_config in this test
+			clusterAutoscaling: &clusterAutoscalingChecks{ // This will be checked as "removed"
+				expectBlockExists: false,
+			},
+			binaryAuthorization: nil, // No binary_authorization in this test
+			expectNoOtherChanges:  false,
 		},
 	}
 
@@ -2426,31 +2622,35 @@ func TestApplyAutopilotRule(t *testing.T) {
 					if caBlock == nil {
 						t.Fatalf("Expected 'cluster_autoscaling' block to exist, but it was not found.")
 					}
-					if tc.clusterAutoscaling.expectEnabledRemoved {
-						if attr := caBlock.Body().GetAttribute("enabled"); attr != nil {
-							t.Errorf("Expected 'enabled' attribute in 'cluster_autoscaling' to be removed, but it was found.")
-						}
-					}
-
-					if tc.clusterAutoscaling.expectResourceLimitsRemoved {
-						if attr := caBlock.Body().GetAttribute("resource_limits"); attr != nil {
-							t.Errorf("Expected 'resource_limits' attribute in 'cluster_autoscaling' to be removed, but it was found.")
-						}
-					}
-
-					if tc.clusterAutoscaling.expectProfileUnchanged != nil {
+					// If expectBlockExists is false, we've already asserted caBlock is nil (or should be).
+					// If expectBlockExists is true (e.g. for autopilot=false cases), then check contents.
+					if caBlock != nil && tc.clusterAutoscaling.expectProfileUnchanged != nil {
 						profileAttr := caBlock.Body().GetAttribute("autoscaling_profile")
 						if profileAttr == nil {
 							t.Errorf("Expected 'autoscaling_profile' attribute in 'cluster_autoscaling' to exist, but it was not found.")
 						} else {
-							val, err := modifier.GetAttributeValue(profileAttr)
-							if err != nil || val.Type() != cty.String || val.AsString() != *tc.clusterAutoscaling.expectProfileUnchanged {
-								t.Errorf("Expected 'autoscaling_profile' to be '%s', got '%v' (err: %v).", *tc.clusterAutoscaling.expectProfileUnchanged, val, err)
+							val, errValue := modifier.GetAttributeValue(profileAttr)
+							if errValue != nil || val.Type() != cty.String || val.AsString() != *tc.clusterAutoscaling.expectProfileUnchanged {
+								t.Errorf("Expected 'autoscaling_profile' to be '%s', got '%v' (err: %v).", *tc.clusterAutoscaling.expectProfileUnchanged, val, errValue)
 							}
 						}
 					}
+					// No need to check for enabled or resource_limits removal if the block itself is handled by topLevelNestedBlocksToRemoveWhenTrue
 				}
 			}
+
+			// Node Config checks (similar to cluster_autoscaling)
+			// This assumes node_config is also listed in expectedTopLevelNestedBlocksRemoved when it should be removed.
+			// For tests where node_config is expected to be removed:
+			if stringInSlice("node_config", tc.expectedTopLevelNestedBlocksRemoved) {
+				ncBlock := clusterBlock.Body().FirstMatchingBlock("node_config", nil)
+				if ncBlock != nil {
+					t.Errorf("Expected 'node_config' block to be removed, but it was found. Modified HCL:\n%s", string(modifier.File().Bytes()))
+				}
+			}
+			// If there are cases where node_config should *not* be removed, and we need to check its contents,
+			// a 'nodeConfigChecks' struct similar to 'clusterAutoscalingChecks' would be needed.
+			// For now, the requirement is to remove it when autopilot=true.
 
 			if tc.binaryAuthorization != nil {
 				baBlock := clusterBlock.Body().FirstMatchingBlock("binary_authorization", nil)
@@ -2491,20 +2691,24 @@ func TestApplyAutopilotRule(t *testing.T) {
 						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot=false' case.")
 					} else {
 						if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
-							t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
+							t.Errorf("Test '%s': 'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.", tc.name)
 						}
 						if addonsCfg.Body().FirstMatchingBlock("http_load_balancing", nil) == nil {
-							t.Errorf("'http_load_balancing' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
+							t.Errorf("Test '%s': 'http_load_balancing' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.", tc.name)
 						}
 					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot=false' case.")
+						t.Errorf("Test '%s': 'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot=false' case.", tc.name)
 					}
-					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil {
-						t.Errorf("'node_pool' block was unexpectedly removed in 'enable_autopilot=false' case.")
+					// Check node_config is not removed for autopilot=false
+					if clusterBlock.Body().FirstMatchingBlock("node_config", nil) == nil && originalBlockHasNodeConfig(tc.hclContent, tc.clusterName, modifier) {
+						t.Errorf("Test '%s': 'node_config' block was unexpectedly removed in 'enable_autopilot=false' case.", tc.name)
+					}
+					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil && originalBlockHasNodePool(tc.hclContent, tc.clusterName, modifier) {
+						t.Errorf("Test '%s': 'node_pool' block was unexpectedly removed in 'enable_autopilot=false' case.", tc.name)
 					}
 				}
-				if tc.name == "enable_autopilot not present, conflicting fields present" {
+				if tc.name == "enable_autopilot not present, conflicting fields present" { // This case should not trigger Autopilot removals
 					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
 						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot not present' case.")
 					}
@@ -2512,29 +2716,37 @@ func TestApplyAutopilotRule(t *testing.T) {
 					if addonsCfg == nil {
 						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot not present' case.")
 					} else if addonsCfg.Body().FirstMatchingBlock("network_policy_config", nil) == nil {
-						t.Errorf("'network_policy_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot not present' case.")
+						t.Errorf("Test '%s': 'network_policy_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot not present' case.", tc.name)
 					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot not present' case.")
+						t.Errorf("Test '%s': 'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot not present' case.", tc.name)
 					}
-					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil {
-						t.Errorf("'node_pool' block was unexpectedly removed in 'enable_autopilot not present' case.")
+					if clusterBlock.Body().FirstMatchingBlock("node_config", nil) == nil && originalBlockHasNodeConfig(tc.hclContent, tc.clusterName, modifier) {
+						t.Errorf("Test '%s': 'node_config' block was unexpectedly removed in 'enable_autopilot not present' case.", tc.name)
+					}
+					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil && originalBlockHasNodePool(tc.hclContent, tc.clusterName, modifier) {
+						t.Errorf("Test '%s': 'node_pool' block was unexpectedly removed in 'enable_autopilot not present' case.", tc.name)
 					}
 				}
 				if tc.name == "enable_autopilot is not a boolean" {
-					// The removal of 'enable_autopilot' is checked by the expectedRootAttrsRemoved logic.
-					// We only need to check that other attributes were not unexpectedly changed.
-					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
+					// enable_autopilot attribute itself is removed by the rule directly, this is checked by expectEnableAutopilotAttr: nil and expectedRootAttrsRemoved.
+					// Check other fields are not touched.
+					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil && originalAttributeExists(tc.hclContent, tc.clusterName, []string{"cluster_ipv4_cidr"}, modifier) {
+						t.Errorf("Test '%s': 'cluster_ipv4_cidr' was unexpectedly removed.", tc.name)
+					}
+					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil && originalAttributeExists(tc.hclContent, tc.clusterName, []string{"enable_shielded_nodes"}, modifier) {
+						t.Errorf("Test '%s': 'enable_shielded_nodes' was unexpectedly removed.", tc.name)
 					}
 					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
-					if addonsCfg == nil {
-						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					} else if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
-						t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					}
-					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
+					originalFileForBoolCheck := parseHCL(tc.hclContent)
+					originalAddonsCfg, _ := findBlockInParsedFile(originalFileForBoolCheck, "google_container_cluster", tc.clusterName)
+					if originalAddonsCfg != nil && originalAddonsCfg.Body().FirstMatchingBlock("addons_config", nil) != nil { // if original had addons_config
+						if addonsCfg == nil {
+							t.Errorf("Test '%s': 'addons_config' block was unexpectedly removed.", tc.name)
+						} else if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil &&
+							originalAddonsCfg.Body().FirstMatchingBlock("addons_config", nil).Body().FirstMatchingBlock("dns_cache_config", nil) != nil {
+							t.Errorf("Test '%s': 'dns_cache_config' in 'addons_config' was unexpectedly removed.", tc.name)
+						}
 					}
 				}
 			}
@@ -2543,6 +2755,65 @@ func TestApplyAutopilotRule(t *testing.T) {
 }
 
 // Helper Functions
+
+// parseHCL is a helper to quickly parse HCL content for original state checks.
+func parseHCL(content string) *hclwrite.File {
+	f, _ := hclwrite.ParseConfig([]byte(content), "", hcl.InitialPos)
+	return f
+}
+
+// originalAttributeExists checks if an attribute exists in the original HCL string.
+func originalAttributeExists(hclContent, clusterName string, path []string, mod *Modifier) bool {
+	originalFile := parseHCL(hclContent)
+	if originalFile == nil {
+		return false
+	}
+	originalClusterBlock, _ := findBlockInParsedFile(originalFile, "google_container_cluster", clusterName)
+	if originalClusterBlock == nil {
+		return false
+	}
+	// GetAttributeValueByPath is part of the Modifier struct, so we use the passed 'mod' instance.
+	// However, it operates on a *hclwrite.Body. We need to ensure we are checking the *original* body.
+	_, attr, _ := mod.GetAttributeValueByPath(originalClusterBlock.Body(), path)
+	return attr != nil
+}
+
+// originalBlockHasNodeConfig checks if the original HCL string for a cluster had a node_config block.
+func originalBlockHasNodeConfig(hclContent, clusterName string, mod *Modifier) bool {
+	originalFile := parseHCL(hclContent)
+	if originalFile == nil {
+		return false
+	}
+	originalClusterBlock, _ := findBlockInParsedFile(originalFile, "google_container_cluster", clusterName)
+	if originalClusterBlock == nil {
+		return false
+	}
+	return originalClusterBlock.Body().FirstMatchingBlock("node_config", nil) != nil
+}
+
+// originalBlockHasNodePool checks if the original HCL string for a cluster had any node_pool block.
+func originalBlockHasNodePool(hclContent, clusterName string, mod *Modifier) bool {
+	originalFile := parseHCL(hclContent)
+	if originalFile == nil {
+		return false
+	}
+	originalClusterBlock, _ := findBlockInParsedFile(originalFile, "google_container_cluster", clusterName)
+	if originalClusterBlock == nil {
+		return false
+	}
+	return originalClusterBlock.Body().FirstMatchingBlock("node_pool", nil) != nil
+}
+
+// stringInSlice checks if a string is present in a slice of strings.
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
 func intPtr(i int) *int {
 	return &i
 }
