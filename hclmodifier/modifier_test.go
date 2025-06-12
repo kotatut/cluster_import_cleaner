@@ -2041,6 +2041,19 @@ func TestApplyAutopilotRule(t *testing.T) {
   default_max_pods_per_node     = 110
   enable_intranode_visibility   = true
 
+  node_config {
+    machine_type = "e2-standard-4"
+    disk_size_gb = 100
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/servicecontrol",
+      "https://www.googleapis.com/auth/trace.append",
+    ]
+  }
+
   addons_config {
     network_policy_config {
       disabled = false
@@ -2080,7 +2093,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     enabled = true
   }
 }`,
-			expectedModifications:     13,
+			expectedModifications:     14,
 			clusterName:               "autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved: []string{
@@ -2093,6 +2106,8 @@ func TestApplyAutopilotRule(t *testing.T) {
 			expectedTopLevelNestedBlocksRemoved: []string{
 				"network_policy",
 				"node_pool",
+				"cluster_autoscaling",
+				"node_config",
 			},
 			addonsConfig: &addonsConfigChecks{
 				expectBlockExists:                true,
@@ -2102,10 +2117,7 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,
-				expectEnabledRemoved:        true,
-				expectResourceLimitsRemoved: true,
-				expectProfileUnchanged:      stringPtr("OPTIMIZE_UTILIZATION"),
+				expectBlockExists:           false, // This signifies the entire block should be removed
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
