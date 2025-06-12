@@ -72,33 +72,29 @@ or older templates. The tool modifies the file in-place.`,
 			rules.HpaProfileRuleDefinition,
 			rules.DiskSizeRuleDefinition,
 			rules.OsVersionRuleDefinition,
-			// Note: InitialNodeCountRule and AutopilotRule are handled separately below
-			// due to their complex logic not yet fully translated to the generic rule engine.
+			rules.InitialNodeCountRuleDefinition, // Added InitialNodeCountRuleDefinition
+			rules.RuleHandleAutopilotFalse,       // Added RuleHandleAutopilotFalse
+			// Note: AutopilotRule is handled separately below
+			// due to its complex logic not yet fully translated to the generic rule engine.
 		}
 
 		var encounteredErrors []error
 
 		logger.Info("Applying generic rules...", zap.Int("ruleCount", len(allRules)))
-		_, genericRuleErrors := hclFile.ApplyRules(allRules)
+		modifications, genericRuleErrors := hclFile.ApplyRules(allRules) // Capture modifications
 		if len(genericRuleErrors) > 0 {
 			encounteredErrors = append(encounteredErrors, genericRuleErrors...)
 		}
-		// logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathFlag)) // Modifications count might be misleading if errors occurred
+		logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathFlag))
 
 		// 3. Apply rules that have complex logic not yet fitting the generic engine.
-		// Apply InitialNodeCount Rule (Complex: Iterates over sub-blocks 'node_pool')
-		logger.Info("Applying InitialNodeCount Rule (custom logic)...")
-		_, err = hclFile.ApplyInitialNodeCountRule()
-		if err != nil {
-			encounteredErrors = append(encounteredErrors, fmt.Errorf("InitialNodeCountRule failed: %w", err))
-		}
-
 		// Apply Autopilot Rule (Complex: Conditional logic based on attribute values, multiple different removals)
 		logger.Info("Applying Autopilot Rule (custom logic)...")
-		_, err = hclFile.ApplyAutopilotRule()
+		autopilotModifications, err := hclFile.ApplyAutopilotRule() // Capture modifications
 		if err != nil {
 			encounteredErrors = append(encounteredErrors, fmt.Errorf("AutopilotRule failed: %w", err))
 		}
+		logger.Info("Autopilot rule application completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathFlag))
 
 		// 4. Write the modified HCL content back to the file.
 		// This should happen regardless of rule application errors, as some rules might have succeeded.

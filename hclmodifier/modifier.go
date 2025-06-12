@@ -191,87 +191,6 @@ func (m *Modifier) RemoveBlock(blockType string, blockLabels []string) error {
 	return nil
 }
 
-func (m *Modifier) RemoveAttributes(resourceTypeLabel string, optionalResourceName *string, attributesToRemove []string) (removedCount int, err error) {
-	m.Logger.Debug("Attempting to remove attributes",
-		zap.String("resourceTypeLabel", resourceTypeLabel),
-		zap.Any("optionalResourceName", optionalResourceName),
-		zap.Strings("attributesToRemove", attributesToRemove))
-
-	if m.file == nil || m.file.Body() == nil {
-		return 0, fmt.Errorf("modifier's file or file body cannot be nil")
-	}
-
-	if len(attributesToRemove) == 0 {
-		m.Logger.Debug("No attributes specified to remove.")
-		return 0, nil
-	}
-
-	var targetResourceName string
-	if optionalResourceName != nil {
-		targetResourceName = *optionalResourceName
-	}
-
-	foundSpecificResource := false
-
-	for _, block := range m.file.Body().Blocks() {
-		if block.Type() != "resource" {
-			continue // Only interested in "resource" blocks
-		}
-
-		labels := block.Labels()
-		if len(labels) == 0 || labels[0] != resourceTypeLabel {
-			continue // Does not match the target resource type label
-		}
-
-		// At this point, the block matches the resourceTypeLabel.
-		// Now check if a specific resource name is targeted.
-		if targetResourceName != "" {
-			if len(labels) < 2 || labels[1] != targetResourceName {
-				continue // This block is not the specific named resource we are looking for.
-			}
-			// If we are looking for a specific resource and found it.
-			foundSpecificResource = true
-		}
-
-		m.Logger.Debug("Processing matching block for attribute removal",
-			zap.String("blockType", block.Type()),
-			zap.Strings("blockLabels", block.Labels()))
-
-		for _, attrName := range attributesToRemove {
-			// Use the existing RemoveAttribute method on Modifier.
-			// This method already handles logging and the case where attribute doesn't exist.
-			errRemove := m.RemoveAttribute(block, attrName)
-			if errRemove != nil {
-				m.Logger.Error("Error removing attribute from block",
-					zap.String("attributeName", attrName),
-					zap.String("blockType", block.Type()),
-					zap.Strings("blockLabels", block.Labels()),
-					zap.Error(errRemove))
-			} else {
-				if block.Body().GetAttribute(attrName) == nil {
-					removedCount++
-				}
-			}
-		}
-		if targetResourceName != "" && foundSpecificResource {
-			break
-		}
-	}
-
-	if targetResourceName != "" && !foundSpecificResource {
-		m.Logger.Warn("Specified resource name not found",
-			zap.String("resourceTypeLabel", resourceTypeLabel),
-			zap.String("targetResourceName", targetResourceName))
-		return removedCount, fmt.Errorf("resource '%s' with name '%s' not found", resourceTypeLabel, targetResourceName)
-	}
-
-	m.Logger.Info("Finished removing attributes",
-		zap.Int("totalAttributesActuallyRemoved", removedCount),
-		zap.String("resourceTypeLabel", resourceTypeLabel),
-		zap.Any("optionalResourceName", optionalResourceName))
-	return removedCount, nil
-}
-
 // GetNestedBlock navigates through a sequence of HCL block names (path) starting from currentBlockBody
 // to find and return a specific nested block.
 // currentBlockBody: The *hclwrite.Body of the block from which to start the search.
@@ -484,12 +403,26 @@ func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path
 }
 
 // ApplyRules processes a slice of Rule definitions and applies them to the Modifier's HCL file.
-// It iterates through each rule, checks its conditions against matching resources in the file,
-// and if all conditions for a rule are met for a given resource, it performs the rule's actions.
-// rules: A slice of Rule structs to be applied.
-// Returns the total number of modifications made to the HCL file and a slice of errors
-// encountered during the application of any rule. Processing continues even if some rules error.
-func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, errors []error) { // Use types.Rule
+// It iterates through each rule and, for each rule, through the resource blocks in the HCL file.
+//
+// Rule Execution Types:
+// - RuleExecutionStandard: Conditions and actions are applied directly to the main resource block
+//   that matches TargetResourceType and TargetResourceLabels. Paths in conditions/actions are
+//   relative to this resource block's body.
+// - RuleExecutionForEachNestedBlock: After finding a matching main resource block, this rule
+//   iterates through all its direct sub-blocks. If a sub-block's type matches the rule's
+//   NestedBlockTargetType (and optionally NestedBlockTargetLabels), the conditions and actions
+//   are applied to that sub-block. Paths in conditions/actions are then relative to this
+//   nested sub-block's body.
+//
+// The function accumulates the total number of successful modifications and a list of any errors
+// encountered. Processing continues even if some rules or actions result in errors.
+//
+// inputRules: A slice of Rule structs to be applied.
+// Returns:
+//   modifications: The total number of successful modifications made to the HCL file.
+//   errors: A slice of errors encountered during the application of any rule.
+func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, errors []error) {
 	m.Logger.Info("Starting ApplyRules processing.", zap.Int("numberOfRules", len(inputRules)))
 	totalModifications := 0
 	var collectedErrors []error
@@ -504,18 +437,24 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 		ruleLogger := m.Logger.With(zap.String("ruleName", currentRule.Name), zap.String("targetResourceType", currentRule.TargetResourceType))
 		ruleLogger.Debug("Processing rule.")
 
-		for _, block := range m.file.Body().Blocks() {
-			if block.Type() != "resource" || len(block.Labels()) == 0 || block.Labels()[0] != currentRule.TargetResourceType {
+		// Initialize ExecutionType if it's empty (for backward compatibility or default behavior)
+		if currentRule.ExecutionType == "" {
+			currentRule.ExecutionType = types.RuleExecutionStandard
+		}
+		ruleLogger = ruleLogger.With(zap.String("executionType", string(currentRule.ExecutionType)))
+
+		for _, resourceBlock := range m.file.Body().Blocks() {
+			if resourceBlock.Type() != "resource" || len(resourceBlock.Labels()) == 0 || resourceBlock.Labels()[0] != currentRule.TargetResourceType {
 				continue
 			}
 
 			if len(currentRule.TargetResourceLabels) > 0 {
-				if len(block.Labels()) < 1+len(currentRule.TargetResourceLabels) {
+				if len(resourceBlock.Labels()) < 1+len(currentRule.TargetResourceLabels) {
 					continue
 				}
 				match := true
 				for i, expectedLabel := range currentRule.TargetResourceLabels {
-					if block.Labels()[i+1] != expectedLabel {
+					if resourceBlock.Labels()[i+1] != expectedLabel {
 						match = false
 						break
 					}
@@ -524,160 +463,85 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 					continue
 				}
 			}
-			resourceLogger := ruleLogger.With(zap.Strings("resourceLabels", block.Labels()))
-			resourceLogger.Debug("Target resource matched. Checking conditions.")
+			resourceLogger := ruleLogger.With(zap.Strings("resourceLabels", resourceBlock.Labels()))
+			resourceLogger.Debug("Target resource matched.")
 
-			conditionsMet := true
-			for _, condition := range currentRule.Conditions {
-				condLogger := resourceLogger.With(zap.String("conditionType", string(condition.Type)), zap.Strings("conditionPath", condition.Path))
-				switch condition.Type {
-				case types.AttributeExists: // Use types.ConditionType
-					_, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
-					if err != nil {
-						condLogger.Debug("Condition AttributeExists not met.", zap.Error(err))
-						conditionsMet = false
-					}
-				case types.AttributeDoesntExists: // Use types.ConditionType
-					_, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
-					if err == nil {
-						condLogger.Debug("Condition AttributeDoesntExists not met.", zap.Error(err))
-						conditionsMet = false
-					}
-				case types.BlockExists: // Use types.ConditionType
-					_, err := m.GetNestedBlock(block.Body(), condition.Path)
-					if err != nil {
-						condLogger.Debug("Condition BlockExists not met.", zap.Error(err))
-						conditionsMet = false
-					}
-				case types.NullValue: // Use types.ConditionType
-					val, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
-					if err != nil || !val.IsNull() {
-						condLogger.Debug("Condition NullValue not met.", zap.Error(err))
-						conditionsMet = false
-					}
-				case types.AttributeValueEquals: // Use types.ConditionType
-					val, _, err := m.GetAttributeValueByPath(block.Body(), condition.Path)
-					if err != nil {
-						condLogger.Debug("AttributeValueEquals: Attribute not found for comparison.", zap.Error(err))
+			// Standard execution: conditions and actions apply to the resourceBlock itself.
+			// Paths for conditions/actions are relative to the resourceBlock's body.
+			if currentRule.ExecutionType == types.RuleExecutionStandard {
+				resourceLogger.Debug("Executing as Standard Rule. Checking conditions for the resource block itself.")
+				conditionsMet := true
+				for _, condition := range currentRule.Conditions {
+					condLogger := resourceLogger.With(zap.String("conditionType", string(condition.Type)), zap.Strings("conditionPath", condition.Path))
+					// Conditions are checked against the main resource block's body.
+					if !m.checkCondition(resourceBlock.Body(), condition, condLogger) {
 						conditionsMet = false
 						break
 					}
+				}
 
-					var expectedCtyValue cty.Value
-					var parseErr error
+				if conditionsMet {
+					resourceLogger.Info("All conditions met for resource. Performing actions on the resource block.")
+					for _, action := range currentRule.Actions {
+						actLogger := resourceLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
+						// Actions are performed on the main resource block's body.
+						errAction := m.performAction(resourceBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
+						if errAction == nil {
+							totalModifications++
+						} else {
+							collectedErrors = append(collectedErrors, errAction)
+						}
+					}
+				} else {
+					resourceLogger.Debug("Not all conditions met for resource block.")
+				}
+			// ForEachNestedBlock execution: conditions and actions apply to each matching nested block
+			// within the resourceBlock. Paths are relative to the nested block's body.
+			} else if currentRule.ExecutionType == types.RuleExecutionForEachNestedBlock {
+				resourceLogger.Debug("Executing as ForEachNestedBlock Rule.", zap.String("nestedBlockTargetType", currentRule.NestedBlockTargetType))
+				if currentRule.NestedBlockTargetType == "" {
+					resourceLogger.Warn("NestedBlockTargetType is not defined for ForEachNestedBlock rule. Skipping this rule for this resource.", zap.String("ruleName", currentRule.Name))
+					collectedErrors = append(collectedErrors, fmt.Errorf("rule '%s' is ForEachNestedBlock but NestedBlockTargetType is empty", currentRule.Name))
+					continue // Skip to the next resource block or rule
+				}
 
-					switch val.Type() {
-					case cty.String:
-						expectedCtyValue = cty.StringVal(condition.ExpectedValue)
-					case cty.Bool:
-						boolVal, err := strconv.ParseBool(condition.ExpectedValue)
-						if err != nil {
-							parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as bool: %w", condition.ExpectedValue, err)
-						} else {
-							expectedCtyValue = cty.BoolVal(boolVal)
-						}
-					case cty.Number:
-						if intVal, err := strconv.ParseInt(condition.ExpectedValue, 10, 64); err == nil {
-							expectedCtyValue = cty.NumberIntVal(intVal)
-						} else if floatVal, err := strconv.ParseFloat(condition.ExpectedValue, 64); err == nil {
-							expectedCtyValue = cty.NumberFloatVal(floatVal)
-						} else {
-							parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as number: %v or %v", condition.ExpectedValue, err, err)
-						}
-					default:
-						condLogger.Warn("AttributeValueEquals: Actual value type is not a primitive type supported for robust ExpectedValue parsing. Falling back to string comparison of actual value.", zap.Any("actualValueType", val.Type()))
-						if val.Type().IsPrimitiveType() {
-							var valStr string
-							switch val.Type() {
-							case cty.String:
-								valStr = val.AsString()
-							case cty.Number:
-								valStr = val.AsBigFloat().String()
-							case cty.Bool:
-								valStr = fmt.Sprintf("%t", val.True())
-							}
-							if valStr != condition.ExpectedValue {
+				// Iterate over direct sub-blocks of the matched resource block.
+				for _, nestedBlock := range resourceBlock.Body().Blocks() {
+					if nestedBlock.Type() == currentRule.NestedBlockTargetType {
+						// TODO: Implement label matching for nestedBlock if currentRule.NestedBlockTargetLabels is populated.
+						// For now, it matches any nested block of the specified type.
+						nestedBlockLogger := resourceLogger.With(zap.String("nestedBlockType", nestedBlock.Type()), zap.Strings("nestedBlockLabels", nestedBlock.Labels()))
+						nestedBlockLogger.Debug("Matching nested block found. Checking conditions for this nested block.")
+
+						conditionsMet := true
+						for _, condition := range currentRule.Conditions {
+							condLogger := nestedBlockLogger.With(zap.String("conditionType", string(condition.Type)), zap.Strings("conditionPath", condition.Path))
+							// Conditions are checked against the nested block's body.
+							// Paths in 'condition.Path' are relative to this 'nestedBlock.Body()'.
+							if !m.checkCondition(nestedBlock.Body(), condition, condLogger) {
 								conditionsMet = false
+								break
+							}
+						}
+
+						if conditionsMet {
+							nestedBlockLogger.Info("All conditions met for nested block. Performing actions on this nested block.")
+							for _, action := range currentRule.Actions {
+								actLogger := nestedBlockLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
+								// Actions are performed on the nested block's body.
+								// Paths in 'action.Path' are relative to this 'nestedBlock.Body()'.
+								errAction := m.performAction(nestedBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
+								if errAction == nil {
+									totalModifications++
+								} else {
+									collectedErrors = append(collectedErrors, errAction)
+								}
 							}
 						} else {
-							conditionsMet = false
+							nestedBlockLogger.Debug("Not all conditions met for this nested block.")
 						}
-						if !conditionsMet {
-							condLogger.Debug("AttributeValueEquals not met (fallback string comparison or unsupported type).", zap.String("expectedValue", condition.ExpectedValue))
-						}
-						break
-					}
-
-					if parseErr != nil {
-						condLogger.Warn("AttributeValueEquals: Error parsing ExpectedValue, condition not met.", zap.Error(parseErr), zap.String("expectedStr", condition.ExpectedValue), zap.Any("actualType", val.Type()))
-						conditionsMet = false
-					} else if conditionsMet && !val.Equals(expectedCtyValue).True() {
-						condLogger.Debug("AttributeValueEquals not met.", zap.Any("actualValue", val), zap.Any("parsedExpectedValue", expectedCtyValue))
-						conditionsMet = false
-					}
-				default:
-					condLogger.Warn("Unknown condition type.")
-					conditionsMet = false
-				}
-				if !conditionsMet {
-					break
-				}
-			}
-
-			if conditionsMet {
-				resourceLogger.Info("All conditions met. Performing actions.")
-				for _, action := range currentRule.Actions {
-					actLogger := resourceLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
-					var errAction error
-					switch action.Type {
-					case types.RemoveAttribute: // Use types.ActionType
-						errAction = m.RemoveAttributeByPath(block.Body(), action.Path)
-						if errAction == nil {
-							totalModifications++
-							actLogger.Info("Action RemoveAttribute successful.")
-						}
-					case types.RemoveBlock: // Use types.ActionType
-						errAction = m.RemoveNestedBlockByPath(block.Body(), action.Path)
-						if errAction == nil {
-							totalModifications++
-							actLogger.Info("Action RemoveBlock successful.")
-						}
-					case types.SetAttributeValue: // Use types.ActionType
-						var valueToSet cty.Value
-						if len(action.PathToSet) != 0 {
-							valueByPath, _, err := m.GetAttributeValueByPath(block.Body(), action.PathToSet)
-							if err != nil {
-								actLogger.Error("Error while getting attitube by path.", zap.Error(err))
-							} else {
-								valueToSet = valueByPath
-							}
-						} else if bVal, err := strconv.ParseBool(action.ValueToSet); err == nil {
-							valueToSet = cty.BoolVal(bVal)
-						} else if iVal, err := strconv.ParseInt(action.ValueToSet, 10, 64); err == nil {
-							valueToSet = cty.NumberIntVal(iVal)
-						} else if fVal, err := strconv.ParseFloat(action.ValueToSet, 64); err == nil {
-							valueToSet = cty.NumberFloatVal(fVal)
-						} else {
-							valueToSet = cty.StringVal(action.ValueToSet)
-						}
-
-						errAction = m.SetAttributeValueByPath(block.Body(), action.Path, valueToSet)
-						if errAction == nil {
-							totalModifications++
-							actLogger.Info("Action SetAttributeValue successful.")
-						}
-					default:
-						actLogger.Warn("Unknown action type.")
-						errAction = fmt.Errorf("unknown action type: %s", action.Type)
-					}
-
-					if errAction != nil {
-						actLogger.Error("Error performing action.", zap.Error(errAction))
-						collectedErrors = append(collectedErrors, fmt.Errorf("rule '%s' action '%s' on resource '%s' failed: %w", currentRule.Name, action.Type, block.Labels(), errAction))
 					}
 				}
-			} else {
-				resourceLogger.Debug("Not all conditions met for resource.")
 			}
 		}
 	}
@@ -692,11 +556,177 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 	return totalModifications, nil
 }
 
-// SetAttributeValueByPath sets an attribute at a potentially nested path within initialBlockBody.
-// initialBlockBody: The *hclwrite.Body to start from.
-// path: A slice of strings representing the path; last element is the attribute name.
+// checkCondition evaluates a single RuleCondition against a given hclwrite.Body.
+// This function is a helper for ApplyRules, used for both standard and nested block execution types.
+//
+// initialBlockBody: The *hclwrite.Body against which the condition is evaluated. For standard rules,
+//                   this is the body of the main resource. For RuleExecutionForEachNestedBlock,
+//                   this is the body of the current nested block being processed.
+// condition: The RuleCondition to check. Paths within the condition are relative to initialBlockBody.
+// condLogger: A zap.Logger instance pre-configured with context for this condition check.
+// Returns true if the condition is met, false otherwise.
+func (m *Modifier) checkCondition(initialBlockBody *hclwrite.Body, condition types.RuleCondition, condLogger *zap.Logger) bool {
+	switch condition.Type {
+	case types.AttributeExists:
+		// Checks if an attribute at condition.Path exists within initialBlockBody.
+		_, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err != nil {
+			condLogger.Debug("Condition AttributeExists not met (attribute not found or error accessing).", zap.Error(err))
+			return false
+		}
+	case types.AttributeDoesntExists:
+		// Checks if an attribute at condition.Path does NOT exist within initialBlockBody.
+		_, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err == nil { // If attribute exists (no error getting it), condition is not met.
+			condLogger.Debug("Condition AttributeDoesntExists not met (attribute was found).")
+			return false
+		}
+		// If err is not nil, it means attribute wasn't found or path was invalid, so condition is met.
+		// Specific error checking could be done here if needed (e.g., distinguish "not found" from "invalid path").
+	case types.BlockExists:
+		// Checks if a nested block at condition.Path exists within initialBlockBody.
+		_, err := m.GetNestedBlock(initialBlockBody, condition.Path)
+		if err != nil {
+			condLogger.Debug("Condition BlockExists not met (block not found or error accessing).", zap.Error(err))
+			return false
+		}
+	case types.NullValue:
+		// Checks if an attribute at condition.Path exists and its value is cty.Null.
+		val, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err != nil || !val.IsNull() { // Error getting value, or value is not null.
+			condLogger.Debug("Condition NullValue not met.", zap.Error(err), zap.Bool("isNull", val.IsNull()))
+			return false
+		}
+	case types.AttributeValueEquals:
+		// Checks if an attribute at condition.Path exists and its value equals condition.ExpectedValue.
+		// Comparison logic attempts to parse ExpectedValue based on the actual attribute's type.
+		val, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err != nil {
+			condLogger.Debug("AttributeValueEquals: Attribute not found for comparison.", zap.Error(err))
+			return false
+		}
+
+		var expectedCtyValue cty.Value
+		var parseErr error
+
+		// Attempt to parse ExpectedValue based on the actual value's type
+		switch val.Type() {
+		case cty.String:
+			expectedCtyValue = cty.StringVal(condition.ExpectedValue)
+		case cty.Bool:
+			boolVal, errConv := strconv.ParseBool(condition.ExpectedValue)
+			if errConv != nil {
+				parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as bool: %w", condition.ExpectedValue, errConv)
+			} else {
+				expectedCtyValue = cty.BoolVal(boolVal)
+			}
+		case cty.Number:
+			if intVal, errConv := strconv.ParseInt(condition.ExpectedValue, 10, 64); errConv == nil {
+				expectedCtyValue = cty.NumberIntVal(intVal)
+			} else if floatVal, errConv := strconv.ParseFloat(condition.ExpectedValue, 64); errConv == nil {
+				expectedCtyValue = cty.NumberFloatVal(floatVal)
+			} else {
+				parseErr = fmt.Errorf("failed to parse ExpectedValue '%s' as number: %v or %v", condition.ExpectedValue, errConv, errConv)
+			}
+		default:
+			condLogger.Warn("AttributeValueEquals: Actual value type is not a primitive type supported for robust ExpectedValue parsing. Condition will likely not be met.", zap.Any("actualValueType", val.Type()))
+			return false // Cannot reliably compare non-primitive types with a string ExpectedValue
+		}
+
+		if parseErr != nil {
+			condLogger.Warn("AttributeValueEquals: Error parsing ExpectedValue, condition not met.", zap.Error(parseErr), zap.String("expectedStr", condition.ExpectedValue), zap.Any("actualType", val.Type()))
+			return false
+		}
+		if !val.Equals(expectedCtyValue).True() {
+			condLogger.Debug("AttributeValueEquals not met.", zap.Any("actualValue", val.GoString()), zap.Any("parsedExpectedValue", expectedCtyValue.GoString()))
+			return false
+		}
+	default:
+		condLogger.Warn("Unknown condition type.")
+		return false
+	}
+	return true
+}
+
+// performAction executes a single RuleAction on a given hclwrite.Body.
+// This function is a helper for ApplyRules, used for both standard and nested block execution types.
+//
+// initialBlockBody: The *hclwrite.Body on which the action is performed. For standard rules,
+//                   this is the body of the main resource. For RuleExecutionForEachNestedBlock,
+//                   this is the body of the current nested block being processed.
+// action: The RuleAction to perform. Paths within the action are relative to initialBlockBody.
+// actLogger: A zap.Logger instance pre-configured with context for this action.
+// ruleName: The name of the rule whose action is being performed (for error reporting).
+// resourceLabels: The labels of the main resource block being processed (for error reporting).
+// Returns an error if the action failed, nil otherwise (indicating a modification was made).
+func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.RuleAction, actLogger *zap.Logger, ruleName string, resourceLabels []string) error {
+	var errAction error
+	switch action.Type {
+	case types.RemoveAttribute:
+		// Removes an attribute at action.Path within initialBlockBody.
+		errAction = m.RemoveAttributeByPath(initialBlockBody, action.Path)
+		if errAction == nil {
+			actLogger.Info("Action RemoveAttribute successful.")
+		}
+	case types.RemoveBlock:
+		// Removes a nested block at action.Path within initialBlockBody.
+		errAction = m.RemoveNestedBlockByPath(initialBlockBody, action.Path)
+		if errAction == nil {
+			actLogger.Info("Action RemoveBlock successful.")
+		}
+	case types.SetAttributeValue:
+		// Sets an attribute at action.Path within initialBlockBody to a specified value.
+		// The value can be derived from action.ValueToSet (parsed string) or action.PathToSet (another attribute's value).
+		var valueToSet cty.Value
+		if len(action.PathToSet) != 0 {
+			// Get value from another attribute (PathToSet) within the same scope (initialBlockBody)
+			valueByPath, _, err := m.GetAttributeValueByPath(initialBlockBody, action.PathToSet)
+			if err != nil {
+				errAction = fmt.Errorf("error getting value from PathToSet '%v': %w", action.PathToSet, err)
+			} else {
+				valueToSet = valueByPath
+			}
+		} else { // Parse ValueToSet string into cty.Value
+			// This is a simplified parser; a more robust solution might be needed for complex types or interpolations
+			if bVal, err := strconv.ParseBool(action.ValueToSet); err == nil {
+				valueToSet = cty.BoolVal(bVal)
+			} else if iVal, err := strconv.ParseInt(action.ValueToSet, 10, 64); err == nil {
+				valueToSet = cty.NumberIntVal(iVal)
+			} else if fVal, err := strconv.ParseFloat(action.ValueToSet, 64); err == nil {
+				valueToSet = cty.NumberFloatVal(fVal)
+			} else {
+				// Default to string if not parsable as bool or number.
+				// This might need refinement if explicit type hints are available or needed.
+				valueToSet = cty.StringVal(action.ValueToSet)
+			}
+		}
+
+		if errAction == nil { // Only proceed if PathToSet was successful (or not used)
+			errAction = m.SetAttributeValueByPath(initialBlockBody, action.Path, valueToSet)
+			if errAction == nil {
+				actLogger.Info("Action SetAttributeValue successful.")
+			}
+		}
+	default:
+		actLogger.Warn("Unknown action type.")
+		errAction = fmt.Errorf("unknown action type: %s", action.Type)
+	}
+
+	if errAction != nil {
+		actLogger.Error("Error performing action.", zap.Error(errAction))
+		return fmt.Errorf("rule '%s' action '%s' on resource '%s' (or its sub-block) failed: %w", ruleName, action.Type, resourceLabels, errAction)
+	}
+	return nil
+}
+
+// SetAttributeValueByPath sets an attribute at a potentially nested path within an initialBlockBody.
+// The path can point to an attribute directly within initialBlockBody or within a deeply nested block.
+// initialBlockBody: The *hclwrite.Body to begin the operation from.
+// path: A slice of strings representing the path. The last element is the attribute name to set,
+//       and preceding elements are nested block names. E.g., `["parent_block", "attribute_name"]`.
 // valueToSet: The cty.Value to set for the attribute.
-// Returns an error if the path is invalid, any intermediate block is not found, or setting the value fails.
+// Returns an error if the path is invalid, any intermediate block is not found, or if the
+// initialBlockBody itself is nil.
 func (m *Modifier) SetAttributeValueByPath(initialBlockBody *hclwrite.Body, path []string, valueToSet cty.Value) error {
 	if initialBlockBody == nil {
 		return fmt.Errorf("SetAttributeValueByPath: initialBlockBody cannot be nil")

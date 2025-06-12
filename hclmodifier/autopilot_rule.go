@@ -10,29 +10,6 @@ import (
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
 )
 
-// AutopilotRuleDefinition is a placeholder for the AutopilotRule because its complex logic,
-// involving conditional checks and removal of various attributes and blocks,
-// is handled by the direct implementation in ApplyAutopilotRule.
-// This definition is not meant to be used by the generic ApplyRules engine.
-//
-// What it does (effectively via ApplyAutopilotRule): If `enable_autopilot` is true, it removes many attributes
-// and blocks that are incompatible or managed by Autopilot (e.g., `node_pool` blocks, `cluster_ipv4_cidr`,
-// certain `addons_config` sub-blocks, `cluster_autoscaling.enabled`, etc.). If `enable_autopilot` is explicitly
-// set to false or is not a boolean, it removes the `enable_autopilot` attribute itself to clean up potentially
-// invalid or confusing states from an import.
-//
-// Why it's necessary for GKE imports: When importing a standard GKE cluster and then trying to convert it to
-// Autopilot by setting `enable_autopilot = true`, or when importing an existing Autopilot cluster, many
-// attributes valid for standard clusters become invalid or are managed by Autopilot. Terraform might produce
-// errors if these attributes are left in the configuration. This rule (via its direct function) cleans these up.
-// If an imported cluster has `enable_autopilot = false` or an invalid value for it, removing the attribute
-// helps avoid potential errors if the user intends to manage it as a standard cluster or correct the attribute.
-var AutopilotRuleDefinition = types.Rule{ // Use types.Rule
-	Name:               "Autopilot Configuration Cleanup Rule (handled by ApplyAutopilotRule)",
-	TargetResourceType: "google_container_cluster",
-	// Conditions and Actions are omitted as this rule is not processed by the generic engine.
-}
-
 // ApplyAutopilotRule cleans a `google_container_cluster` resource configuration based on the `enable_autopilot` attribute.
 // If `enable_autopilot = true`, it removes attributes and blocks that are incompatible with Autopilot mode.
 // This includes node pools, certain network settings, and specific autoscaling/binary authorization fields.
@@ -86,38 +63,45 @@ func (m *Modifier) ApplyAutopilotRule() (modifications int, err error) {
 			}
 
 			isAutopilotTrue := false
-			removeEnableAutopilotAttr := false
+			removeEnableAutopilotNonBool := false
 
 			if autopilotVal.Type() == cty.Bool {
 				if autopilotVal.True() {
 					isAutopilotTrue = true
 					resLogger.Info("Autopilot enabled. Applying necessary modifications.")
 				} else {
-					// enable_autopilot = false
-					resLogger.Info("Autopilot explicitly disabled. Removing 'enable_autopilot' attribute itself.")
-					removeEnableAutopilotAttr = true
+					// enable_autopilot = false. This case is now handled by the generic RuleHandleAutopilotFalse.
+					// No action needed here for enable_autopilot = false itself.
+					resLogger.Debug("Autopilot explicitly disabled (enable_autopilot = false). Generic rule will handle removal.")
+					// We can 'continue' here because if it's false, no other logic in this function applies.
+					continue
 				}
 			} else {
 				// enable_autopilot is not a boolean (e.g., "not_a_boolean")
 				resLogger.Warn("'enable_autopilot' attribute is not a boolean value. Removing attribute.", zap.String("valueType", autopilotVal.Type().FriendlyName()))
-				removeEnableAutopilotAttr = true
+				removeEnableAutopilotNonBool = true
 			}
 
-			if removeEnableAutopilotAttr {
+			if removeEnableAutopilotNonBool {
+				// This part handles only the non-boolean case. The 'false' boolean case is handled by the new generic rule.
 				if _, existingAttrCheck, _ := m.GetAttributeValueByPath(block.Body(), []string{"enable_autopilot"}); existingAttrCheck != nil {
 					if errRemove := m.RemoveAttributeByPath(block.Body(), []string{"enable_autopilot"}); errRemove != nil {
-						resLogger.Error("Error removing 'enable_autopilot' attribute.", zap.Error(errRemove))
+						resLogger.Error("Error removing non-boolean 'enable_autopilot' attribute.", zap.Error(errRemove))
 						if firstError == nil {
 							firstError = errRemove
 						}
 					} else {
 						modificationCount++
-						resLogger.Info("Successfully removed 'enable_autopilot' (false) attribute.")
+						resLogger.Info("Successfully removed non-boolean 'enable_autopilot' attribute.")
 					}
 				}
+				// After attempting removal of non-boolean, no further Autopilot-specific logic (like removing node_pools) should apply.
 				continue
 			}
 
+			// Only proceed with Autopilot-specific removals if isAutopilotTrue is actually true.
+			// The case for enable_autopilot = false is handled by RuleHandleAutopilotFalse.
+			// The case for enable_autopilot = non-boolean has its attribute removed and then we continue.
 			if isAutopilotTrue {
 				// Remove defined top-level attributes IF THEY EXIST
 				for _, attrName := range attributesToRemoveWhenTrue {
