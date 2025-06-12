@@ -22,7 +22,7 @@ var PodIPV4CIDRRuleDefinition = types.Rule{
 	TargetResourceType: "google_container_cluster",
 	Conditions: []types.RuleCondition{
 		{
-			Type: types.BlockExists, // Ensure ip_allocation_policy block exists first
+			Type: types.BlockExists,
 			Path: []string{"ip_allocation_policy"},
 		},
 		{

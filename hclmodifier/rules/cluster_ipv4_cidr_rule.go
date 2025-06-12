@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import the types package
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // ClusterIPV4CIDRRuleDefinition defines a rule for handling conflicts between the top-level `cluster_ipv4_cidr`

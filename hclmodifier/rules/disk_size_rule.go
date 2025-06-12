@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import the types package
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 var DiskSizeRuleDefinition = types.Rule{

@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // InitialNodeCountRuleDefinition defines a rule that removes the `initial_node_count` attribute
@@ -23,13 +23,13 @@ var InitialNodeCountRuleDefinition = types.Rule{
 	Conditions: []types.RuleCondition{
 		{
 			Type: types.AttributeExists,
-			Path: []string{"initial_node_count"}, // Path relative to the node_pool block
+			Path: []string{"initial_node_count"},
 		},
 	},
 	Actions: []types.RuleAction{
 		{
 			Type: types.RemoveAttribute,
-			Path: []string{"initial_node_count"}, // Path relative to the node_pool block
+			Path: []string{"initial_node_count"},
 		},
 	},
 }

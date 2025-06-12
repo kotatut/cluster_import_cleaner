@@ -16,7 +16,6 @@ import (
 var RuleHandleAutopilotFalse = types.Rule{
 	Name:               "Autopilot Cleanup: Remove 'enable_autopilot' if explicitly set to false",
 	TargetResourceType: "google_container_cluster",
-	ExecutionType:      types.RuleExecutionStandard, // Or can be omitted for default
 	Conditions: []types.RuleCondition{
 		{
 			Type: types.AttributeExists,
@@ -75,39 +74,4 @@ var AutopilotRules = []types.Rule{
 			{Type: types.RemoveAttribute, Path: []string{"binary_authorization", "enabled"}},
 		},
 	},
-	{
-		Name:               "Autopilot Cleanup: Handle enable_autopilot is not boolean",
-		TargetResourceType: "google_container_cluster",
-		Conditions: []types.RuleCondition{
-			{
-				Type:                     types.AttributeTypeIsNot,
-				Path:                     []string{"enable_autopilot"},
-				ExpectedTypeFriendlyName: "bool",
-			},
-		},
-		Actions: []types.RuleAction{
-			{Type: types.RemoveAttribute, Path: []string{"enable_autopilot"}},
-		},
-	},
 }
-
-// RuleHandleAutopilotFalse is a separate rule that should already exist or be defined elsewhere.
-// It handles the case where `enable_autopilot = false`.
-// For the purpose of this refactoring, we assume it's correctly handled by another rule.
-// Example (if it were to be defined here):
-/*
-var RuleHandleAutopilotFalse = types.Rule{
-	Name:               "Autopilot Cleanup: Handle enable_autopilot = false",
-	TargetResourceType: "google_container_cluster",
-	Conditions: []types.RuleCondition{
-		{
-			Type:          types.AttributeValueEquals,
-			Path:          []string{"enable_autopilot"},
-			ExpectedValue: "false",
-		},
-	},
-	Actions: []types.RuleAction{
-		{Type: types.RemoveAttribute, Path: []string{"enable_autopilot"}},
-	},
-}
-*/

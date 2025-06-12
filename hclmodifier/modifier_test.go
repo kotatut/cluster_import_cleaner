@@ -1,20 +1,19 @@
 package hclmodifier
 
 import (
-	"fmt" // Added for helper functions
+	"fmt"
 	"os"
-	"strings" // Added for strings.Contains
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
-	// "github.com/hashicorp/hcl/v2/hclsyntax" // Removed as it's unused
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/stretchr/testify/assert" // For assertions
+	"github.com/stretchr/testify/assert"
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
 
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules" // Import for rule definitions
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 func TestEnhancedAttributeValueEquals(t *testing.T) {
@@ -1369,7 +1368,7 @@ resource "google_container_cluster" "gke_two" {
 				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
 			}
 
-			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+			if len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetResourceBlock *hclwrite.Block
@@ -1466,7 +1465,7 @@ resource "google_container_cluster" "gke_two" {
 
 func TestApplyServicesIPV4CIDRRule(t *testing.T) {
 	t.Helper()
-	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
+	logger, _ := zap.NewDevelopment()
 
 	tests := []struct {
 		name                                  string
@@ -1665,7 +1664,7 @@ resource "google_container_cluster" "beta" {
 				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
 			}
 
-			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+			if len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetResourceBlock *hclwrite.Block
@@ -1747,7 +1746,7 @@ resource "google_container_cluster" "beta" {
 
 func TestApplyClusterIPV4CIDRRule(t *testing.T) {
 	t.Helper()
-	logger, _ := zap.NewDevelopment() // Keep NewDevelopment here if intentional for this test
+	logger, _ := zap.NewDevelopment()
 
 	tests := []struct {
 		name                         string
@@ -1938,7 +1937,7 @@ resource "google_container_cluster" "secondary" {
 				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
 			}
 
-			if tc.resourceLabelsToVerify != nil && len(tc.resourceLabelsToVerify) == 2 {
+			if len(tc.resourceLabelsToVerify) == 2 {
 				blockType := tc.resourceLabelsToVerify[0]
 				blockName := tc.resourceLabelsToVerify[1]
 				var targetBlock *hclwrite.Block
@@ -2118,7 +2117,7 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           false, // This signifies the entire block should be removed
+				expectBlockExists: false,
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
@@ -2159,9 +2158,9 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,  // It should exist
-				expectEnabledRemoved:        false, // The 'enabled' attribute within it should not be removed
-				expectResourceLimitsRemoved: false, // resource_limits is not present in this HCL, so this is fine
+				expectBlockExists:           true,                  // It should exist
+				expectEnabledRemoved:        false,                 // The 'enabled' attribute within it should not be removed
+				expectResourceLimitsRemoved: false,                 // resource_limits is not present in this HCL, so this is fine
 				expectProfileUnchanged:      stringPtr("BALANCED"), // Profile should be "BALANCED"
 			},
 			binaryAuthorization:  nil,
@@ -2220,35 +2219,13 @@ func TestApplyAutopilotRule(t *testing.T) {
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
 				expectBlockExists:           false,
-				expectEnabledRemoved:        false, // This was already false
-				expectResourceLimitsRemoved: false, // This was already false
-				expectProfileUnchanged:      nil,   // This was already nil
+				expectEnabledRemoved:        false,
+				expectResourceLimitsRemoved: false,
+				expectProfileUnchanged:      nil,
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
 				expectEnabledRemoved: false,
-			},
-			expectNoOtherChanges: true,
-		},
-		{
-			name: "enable_autopilot is not a boolean",
-			hclContent: `resource "google_container_cluster" "invalid_autopilot_cluster" {
-  name             = "invalid-autopilot-cluster"
-  enable_autopilot = "not_a_boolean"
-  enable_shielded_nodes = true
-  cluster_ipv4_cidr     = "10.0.0.0/8"
-  addons_config {
-    dns_cache_config { enabled = true }
-  }
-}`,
-			expectedModifications:               1,
-			clusterName:                         "invalid_autopilot_cluster",
-			expectEnableAutopilotAttr:           nil,
-			expectedRootAttrsRemoved:            []string{"enable_autopilot"}, // Added "enable_autopilot"
-			expectedTopLevelNestedBlocksRemoved: []string{},
-			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:     true,
-				expectDnsCacheRemoved: false,
 			},
 			expectNoOtherChanges: true,
 		},
@@ -2312,7 +2289,7 @@ func TestApplyAutopilotRule(t *testing.T) {
 				}
 			}
 
-			autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse} // Added RuleHandleAutopilotFalse
+			autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
 			autopilotRules = append(autopilotRules, rules.AutopilotRules...)
 			modifications, ruleErr := modifier.ApplyRules(autopilotRules)
 			if ruleErr != nil {
@@ -2420,7 +2397,6 @@ func TestApplyAutopilotRule(t *testing.T) {
 						}
 						if tc.addonsConfig.expectHttpLoadBalancingUnchanged {
 							if acBlockInHCL.Body().FirstMatchingBlock("http_load_balancing", nil) == nil {
-								// This check was fine, but ensure it's within the expectBlockExists == true path
 								t.Errorf("Expected 'http_load_balancing' in 'addons_config' to be present, but it was not found. Test: %s", tc.name)
 							}
 						}
@@ -2467,7 +2443,7 @@ func TestApplyAutopilotRule(t *testing.T) {
 							// If the block is expected to exist, but profile is nil in checks,
 							// and profile was in input, it implies profile should also be gone.
 							if profileAttr := caBlockInHCL.Body().GetAttribute("autoscaling_profile"); profileAttr != nil {
-								 t.Errorf("Expected 'autoscaling_profile' to be removed (or not checked if nil), but found. Test: %s", tc.name)
+								t.Errorf("Expected 'autoscaling_profile' to be removed (or not checked if nil), but found. Test: %s", tc.name)
 							}
 						}
 					}
@@ -2641,7 +2617,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 		hclContent            string
 		expectedHCLContent    string
 		expectedModifications int
-		ruleToApply           types.Rule // This should be types.Rule
+		ruleToApply           types.Rule
 	}{
 		{
 			name: "logging_service should be removed when telemetry is ENABLED",
@@ -2661,7 +2637,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
   }
 }`,
 			expectedModifications: 1,
-			ruleToApply:           rules.RuleRemoveLoggingService, // This assigns rules.Rule to hclmodifier.Rule
+			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
 			name: "logging_service should NOT be removed when telemetry is DISABLED",
@@ -2794,7 +2770,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 		hclContent            string
 		expectedHCLContent    string
 		expectedModifications int
-		ruleToApply           types.Rule // This should be types.Rule
+		ruleToApply           types.Rule
 	}{
 		{
 			name: "monitoring_service should be removed when monitoring_config block exists",
@@ -2814,7 +2790,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
   }
 }`,
 			expectedModifications: 1,
-			ruleToApply:           rules.RuleRemoveMonitoringService, // This assigns rules.Rule to hclmodifier.Rule
+			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
 		{
 			name: "monitoring_service should NOT be removed when monitoring_config block is missing",

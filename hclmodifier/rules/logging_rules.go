@@ -42,7 +42,7 @@ var RuleRemoveLoggingService = types.Rule{
 	},
 }
 
-var RuleRemoveLoggingService2 = types.Rule{
+var RemoveLoggingServiceOnConfigPresentRule = types.Rule{
 	Name:               "Logging Service Rule 2: Remove logging_service if logging_config block exists",
 	TargetResourceType: "google_container_cluster",
 	Conditions: []types.RuleCondition{

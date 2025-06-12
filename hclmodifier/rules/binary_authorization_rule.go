@@ -22,7 +22,7 @@ var BinaryAuthorizationRuleDefinition = types.Rule{
 	TargetResourceType: "google_container_cluster",
 	Conditions: []types.RuleCondition{
 		{
-			Type: types.BlockExists, // Ensure binary_authorization block exists first
+			Type: types.BlockExists,
 			Path: []string{"binary_authorization"},
 		},
 		{
