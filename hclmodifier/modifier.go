@@ -5,6 +5,7 @@ import (
 	"os"
 	"slices"
 	"strconv" // Added for parsing string to bool/number
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -301,14 +302,14 @@ func (m *Modifier) GetAttributeValueByPath(initialBlockBody *hclwrite.Body, path
 // path: A slice of strings representing the path. The last element is the attribute name to remove,
 // and preceding elements are nested block names. E.g., `["parent_block", "child_block", "attribute_name"]`.
 // For a direct attribute in initialBlockBody, path is `["attribute_name"]`.
-// Returns an error if the path is invalid or any intermediate block is not found.
-// If the attribute to be removed does not exist at the specified path, it's a no-op and returns nil.
-func (m *Modifier) RemoveAttributeByPath(initialBlockBody *hclwrite.Body, path []string) error {
+// Returns the number of modifications (0 or 1) and an error if the path is invalid or any intermediate block is not found.
+// If the attribute to be removed does not exist at the specified path, it's a no-op and returns (0, nil).
+func (m *Modifier) RemoveAttributeByPath(initialBlockBody *hclwrite.Body, path []string) (int, error) {
 	if initialBlockBody == nil {
-		return fmt.Errorf("RemoveAttributeByPath: initialBlockBody cannot be nil")
+		return 0, fmt.Errorf("RemoveAttributeByPath: initialBlockBody cannot be nil")
 	}
 	if len(path) == 0 {
-		return fmt.Errorf("RemoveAttributeByPath: path cannot be empty")
+		return 0, fmt.Errorf("RemoveAttributeByPath: path cannot be empty")
 	}
 
 	logger := m.Logger.With(zap.Strings("path", path))
@@ -323,24 +324,32 @@ func (m *Modifier) RemoveAttributeByPath(initialBlockBody *hclwrite.Body, path [
 	} else {
 		parentBlock, err := m.GetNestedBlock(initialBlockBody, blockPath)
 		if err != nil {
-			logger.Error("RemoveAttributeByPath: Could not find parent block for attribute.", zap.Error(err))
-			return fmt.Errorf("parent block for attribute '%s' not found: %w", attributeName, err)
+			// Check if the error is because the block was not found.
+			// The error format from GetNestedBlock is "block '%s' not found at path level %d"
+			// or "target block not found at path '%s'".
+			if _, ok := err.(interface{ IsNotFound() bool }); ok || (err.Error() != "" && (strings.Contains(err.Error(), "not found at path level") || strings.Contains(err.Error(), "target block not found at path"))) {
+				logger.Debug("RemoveAttributeByPath: Parent block not found, attribute cannot be removed (no-op).", zap.Error(err))
+				return 0, nil // 0 modifications, No error
+			}
+			// For other errors from GetNestedBlock, return the error
+			logger.Error("RemoveAttributeByPath: Error finding parent block for attribute.", zap.Error(err))
+			return 0, fmt.Errorf("error finding parent block for attribute '%s': %w", attributeName, err)
 		}
 		if parentBlock.Body() == nil {
 			logger.Error("RemoveAttributeByPath: Parent block has no body.", zap.Strings("blockPath", blockPath))
-			return fmt.Errorf("parent block '%s' has no body", blockPath)
+			return 0, fmt.Errorf("parent block '%s' has no body", blockPath)
 		}
 		targetBody = parentBlock.Body()
 	}
 
 	if targetBody.GetAttribute(attributeName) == nil {
 		logger.Debug("RemoveAttributeByPath: Attribute to remove not found, no action needed.", zap.String("attributeName", attributeName))
-		return nil
+		return 0, nil // 0 modifications
 	}
 
 	targetBody.RemoveAttribute(attributeName)
 	logger.Info("RemoveAttributeByPath: Successfully removed attribute.", zap.String("attributeName", attributeName))
-	return nil
+	return 1, nil // 1 modification
 }
 
 // RemoveNestedBlockByPath removes a nested block specified by a path, starting from an initialBlockBody.
@@ -348,14 +357,14 @@ func (m *Modifier) RemoveAttributeByPath(initialBlockBody *hclwrite.Body, path [
 // path: A slice of strings where each string is a block type/name in the nesting hierarchy,
 // leading to the block to be removed. The last element in the path is the name of the block to remove.
 // E.g., to remove block "c" in `a { b { c {} } }`, path would be `["b", "c"]` if `initialBlockBody` is body of `a`.
-// Returns an error if the path is invalid or any intermediate parent block is not found.
-// If the block to be removed does not exist at the specified path, it's a no-op and returns nil.
-func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path []string) error {
+// Returns the number of modifications (0 or 1) and an error if the path is invalid or any intermediate parent block is not found.
+// If the block to be removed does not exist at the specified path, it's a no-op and returns (0, nil).
+func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path []string) (int, error) {
 	if initialBlockBody == nil {
-		return fmt.Errorf("RemoveNestedBlockByPath: initialBlockBody cannot be nil")
+		return 0, fmt.Errorf("RemoveNestedBlockByPath: initialBlockBody cannot be nil")
 	}
 	if len(path) == 0 {
-		return fmt.Errorf("RemoveNestedBlockByPath: path cannot be empty")
+		return 0, fmt.Errorf("RemoveNestedBlockByPath: path cannot be empty")
 	}
 
 	logger := m.Logger.With(zap.Strings("path", path))
@@ -370,12 +379,18 @@ func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path
 	} else {
 		parentBlock, err := m.GetNestedBlock(initialBlockBody, parentBlockPath)
 		if err != nil {
-			logger.Error("RemoveNestedBlockByPath: Could not find parent block of the block to remove.", zap.Error(err))
-			return fmt.Errorf("parent block for '%s' not found: %w", blockToRemoveName, err)
+			// Check if the error is because the block was not found.
+			if _, ok := err.(interface{ IsNotFound() bool }); ok || (err.Error() != "" && (strings.Contains(err.Error(), "not found at path level") || strings.Contains(err.Error(), "target block not found at path"))) {
+				logger.Debug("RemoveNestedBlockByPath: Parent block of the block to remove not found, removal is a no-op.", zap.Error(err))
+				return 0, nil // 0 modifications, No error
+			}
+			// For other errors from GetNestedBlock, return the error
+			logger.Error("RemoveNestedBlockByPath: Error finding parent block of the block to remove.", zap.Error(err))
+			return 0, fmt.Errorf("error finding parent block for '%s': %w", blockToRemoveName, err)
 		}
 		if parentBlock.Body() == nil {
 			logger.Error("RemoveNestedBlockByPath: Parent block has no body.", zap.Strings("parentBlockPath", parentBlockPath))
-			return fmt.Errorf("parent block '%s' has no body", parentBlockPath)
+			return 0, fmt.Errorf("parent block '%s' has no body", parentBlockPath)
 		}
 		bodyToRemoveFrom = parentBlock.Body()
 	}
@@ -390,16 +405,16 @@ func (m *Modifier) RemoveNestedBlockByPath(initialBlockBody *hclwrite.Body, path
 
 	if blockToRemove == nil {
 		logger.Debug("RemoveNestedBlockByPath: Block to remove not found, no action needed.", zap.String("blockToRemoveName", blockToRemoveName))
-		return nil
+		return 0, nil // 0 modifications
 	}
 
 	if removed := bodyToRemoveFrom.RemoveBlock(blockToRemove); !removed {
 		logger.Error("RemoveNestedBlockByPath: Failed to remove block using RemoveBlock method.", zap.String("blockToRemoveName", blockToRemoveName))
-		return fmt.Errorf("failed to remove block '%s'", blockToRemoveName)
+		return 0, fmt.Errorf("failed to remove block '%s'", blockToRemoveName) // 0 modifications on failure
 	}
 
 	logger.Info("RemoveNestedBlockByPath: Successfully removed nested block.", zap.String("blockToRemoveName", blockToRemoveName))
-	return nil
+	return 1, nil // 1 modification
 }
 
 // ApplyRules processes a slice of Rule definitions and applies them to the Modifier's HCL file.
@@ -485,10 +500,9 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 					for _, action := range currentRule.Actions {
 						actLogger := resourceLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
 						// Actions are performed on the main resource block's body.
-						errAction := m.performAction(resourceBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
-						if errAction == nil {
-							totalModifications++
-						} else {
+						mods, errAction := m.performAction(resourceBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
+						totalModifications += mods
+						if errAction != nil {
 							collectedErrors = append(collectedErrors, errAction)
 						}
 					}
@@ -530,10 +544,9 @@ func (m *Modifier) ApplyRules(inputRules []types.Rule) (modifications int, error
 								actLogger := nestedBlockLogger.With(zap.String("actionType", string(action.Type)), zap.Strings("actionPath", action.Path))
 								// Actions are performed on the nested block's body.
 								// Paths in 'action.Path' are relative to this 'nestedBlock.Body()'.
-								errAction := m.performAction(nestedBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
-								if errAction == nil {
-									totalModifications++
-								} else {
+								mods, errAction := m.performAction(nestedBlock.Body(), action, actLogger, currentRule.Name, resourceBlock.Labels())
+								totalModifications += mods
+								if errAction != nil {
 									collectedErrors = append(collectedErrors, errAction)
 								}
 							}
@@ -675,22 +688,39 @@ func (m *Modifier) checkCondition(initialBlockBody *hclwrite.Body, condition typ
 // actLogger: A zap.Logger instance pre-configured with context for this action.
 // ruleName: The name of the rule whose action is being performed (for error reporting).
 // resourceLabels: The labels of the main resource block being processed (for error reporting).
-// Returns an error if the action failed, nil otherwise (indicating a modification was made).
-func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.RuleAction, actLogger *zap.Logger, ruleName string, resourceLabels []string) error {
+// Returns the number of modifications made and an error if the action failed.
+func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.RuleAction, actLogger *zap.Logger, ruleName string, resourceLabels []string) (int, error) {
 	var errAction error
 	switch action.Type {
 	case types.RemoveAttribute:
-		// Removes an attribute at action.Path within initialBlockBody.
-		errAction = m.RemoveAttributeByPath(initialBlockBody, action.Path)
-		if errAction == nil {
-			actLogger.Info("Action RemoveAttribute successful.")
+		mods, err := m.RemoveAttributeByPath(initialBlockBody, action.Path)
+		// errAction will be set here for the final error handler
+		errAction = err // Capture error for potential formatting at the end
+		if errAction == nil { // If no error from RemoveAttributeByPath
+			if mods > 0 {
+				actLogger.Info("Action RemoveAttribute successful.", zap.Int("attributesRemoved", mods))
+			} else {
+				actLogger.Debug("Action RemoveAttribute resulted in no actual changes (attribute likely not found or parent path missing).")
+			}
+			return mods, nil // Return actual mods, and nil error
 		}
+		// If errAction is not nil, it will be handled by the block at the end of performAction
+		// We must return 0 modifications in case of an error from the helper.
+		return 0, errAction
 	case types.RemoveBlock:
-		// Removes a nested block at action.Path within initialBlockBody.
-		errAction = m.RemoveNestedBlockByPath(initialBlockBody, action.Path)
-		if errAction == nil {
-			actLogger.Info("Action RemoveBlock successful.")
+		mods, err := m.RemoveNestedBlockByPath(initialBlockBody, action.Path)
+		errAction = err // Capture error for potential formatting at the end
+		if errAction == nil { // If no error from RemoveNestedBlockByPath
+			if mods > 0 {
+				actLogger.Info("Action RemoveBlock successful.", zap.Int("blocksRemoved", mods))
+			} else {
+				actLogger.Debug("Action RemoveBlock resulted in no actual changes (block likely not found or parent path missing).")
+			}
+			return mods, nil // Return actual mods, and nil error
 		}
+		// If errAction is not nil, it will be handled by the block at the end of performAction
+		// We must return 0 modifications in case of an error from the helper.
+		return 0, errAction
 	case types.RemoveAllBlocksOfType:
 		actLogger.Debug("Performing RemoveAllBlocksOfType", zap.String("blockTypeToRemove", action.BlockTypeToRemove))
 		blocksToRemove := []*hclwrite.Block{}
@@ -701,22 +731,18 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 		}
 		if len(blocksToRemove) == 0 {
 			actLogger.Debug("No blocks found matching type, no action needed.", zap.String("blockTypeToRemove", action.BlockTypeToRemove))
-			// Return nil because no error, but also no modification in this specific case.
-			// The modification counter in ApplyRules increments if errAction is nil.
-			// To prevent incorrect counting, we could return a specific error or handle count more granularly.
-			// For now, this will count as a "successful" (no-error) action.
-			return nil
+			return 0, nil // No modification, no error.
 		}
 		for _, b := range blocksToRemove {
 			initialBlockBody.RemoveBlock(b)
 			actLogger.Info("Removed block of type", zap.String("removedBlockType", b.Type()), zap.Strings("blockLabels", b.Labels()))
 		}
-		errAction = nil // Explicitly set to nil as modifications were made
+		return len(blocksToRemove), nil // Return number of blocks removed, no error.
 	case types.RemoveAllNestedBlocksMatchingPath:
 		actLogger.Debug("Performing RemoveAllNestedBlocksMatchingPath", zap.Strings("path", action.Path))
 		if len(action.Path) == 0 {
 			errAction = fmt.Errorf("RemoveAllNestedBlocksMatchingPath: action.Path cannot be empty")
-			break
+			break // Break to be handled by the final error check
 		}
 		nestedBlockTypeToRemove := action.Path[len(action.Path)-1]
 		parentBlockPath := action.Path[:len(action.Path)-1]
@@ -728,11 +754,11 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 			parentBlock, err := m.GetNestedBlock(initialBlockBody, parentBlockPath)
 			if err != nil {
 				errAction = fmt.Errorf("could not find parent block for RemoveAllNestedBlocksMatchingPath: %w", err)
-				break
+				break // Break to be handled by the final error check
 			}
 			if parentBlock.Body() == nil {
 				errAction = fmt.Errorf("parent block '%s' has no body for RemoveAllNestedBlocksMatchingPath", parentBlockPath)
-				break
+				break // Break to be handled by the final error check
 			}
 			parentBlockBody = parentBlock.Body()
 		}
@@ -746,23 +772,27 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 
 		if len(blocksToRemoveInNested) == 0 {
 			actLogger.Debug("No nested blocks found matching type in parent, no action needed.", zap.String("nestedBlockTypeToRemove", nestedBlockTypeToRemove))
-			return nil // No error, no modification.
+			return 0, nil // No modification, no error.
 		}
 
 		for _, b := range blocksToRemoveInNested {
 			parentBlockBody.RemoveBlock(b)
 			actLogger.Info("Removed nested block of type", zap.String("removedNestedBlockType", b.Type()), zap.Strings("parentPath", parentBlockPath))
 		}
-		errAction = nil // Explicitly set to nil as modifications were made
+		return len(blocksToRemoveInNested), nil // Return number of blocks removed, no error.
 	case types.SetAttributeValue:
 		// Sets an attribute at action.Path within initialBlockBody to a specified value.
 		// The value can be derived from action.ValueToSet (parsed string) or action.PathToSet (another attribute's value).
 		var valueToSet cty.Value
+		// Ensure errAction is initialized for this case, as it's used to check for errors from PathToSet
+		var errFromPathToSet error
+
 		if len(action.PathToSet) != 0 {
 			// Get value from another attribute (PathToSet) within the same scope (initialBlockBody)
 			valueByPath, _, err := m.GetAttributeValueByPath(initialBlockBody, action.PathToSet)
 			if err != nil {
-				errAction = fmt.Errorf("error getting value from PathToSet '%v': %w", action.PathToSet, err)
+				// Capture the error from PathToSet to be handled before calling SetAttributeValueByPath
+				errFromPathToSet = fmt.Errorf("error getting value from PathToSet '%v': %w", action.PathToSet, err)
 			} else {
 				valueToSet = valueByPath
 			}
@@ -781,22 +811,40 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 			}
 		}
 
-		if errAction == nil { // Only proceed if PathToSet was successful (or not used)
-			errAction = m.SetAttributeValueByPath(initialBlockBody, action.Path, valueToSet)
-			if errAction == nil {
-				actLogger.Info("Action SetAttributeValue successful.")
-			}
+		// If there was an error getting value from PathToSet, propagate it immediately.
+		if errFromPathToSet != nil {
+			errAction = errFromPathToSet // Set errAction for the final handler
+			return 0, errAction        // Return 0 mods and the error
 		}
+
+		mods, err := m.SetAttributeValueByPath(initialBlockBody, action.Path, valueToSet)
+		errAction = err // Capture error from SetAttributeValueByPath for potential formatting
+		if errAction == nil { // If no error from SetAttributeValueByPath
+			if mods > 0 {
+				actLogger.Info("Action SetAttributeValue successful (attribute set or changed).", zap.Int("attributesSet", mods))
+			} else {
+				actLogger.Debug("Action SetAttributeValue resulted in no actual changes (attribute already had the target value).")
+			}
+			return mods, nil // Return actual mods, and nil error
+		}
+		// If errAction is not nil (error from SetAttributeValueByPath), it will be handled by the block at the end.
+		// We must return 0 modifications in case of an error from the helper.
+		return 0, errAction
 	default:
 		actLogger.Warn("Unknown action type.")
 		errAction = fmt.Errorf("unknown action type: %s", action.Type)
+		// errAction will be handled by the final error check.
 	}
 
 	if errAction != nil {
 		actLogger.Error("Error performing action.", zap.Error(errAction))
-		return fmt.Errorf("rule '%s' action '%s' on resource '%s' (or its sub-block) failed: %w", ruleName, action.Type, resourceLabels, errAction)
+		// Return 0 modifications if there was an error.
+		return 0, fmt.Errorf("rule '%s' action '%s' on resource '%s' (or its sub-block) failed: %w", ruleName, action.Type, resourceLabels, errAction)
 	}
-	return nil
+	// This path should ideally not be reached if all cases correctly return (mods, error)
+	// or set errAction for the final check.
+	// It implies a successful action that didn't explicitly return a modification count.
+	return 0, nil
 }
 
 // SetAttributeValueByPath sets an attribute at a potentially nested path within an initialBlockBody.
@@ -805,14 +853,14 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 // path: A slice of strings representing the path. The last element is the attribute name to set,
 //       and preceding elements are nested block names. E.g., `["parent_block", "attribute_name"]`.
 // valueToSet: The cty.Value to set for the attribute.
-// Returns an error if the path is invalid, any intermediate block is not found, or if the
-// initialBlockBody itself is nil.
-func (m *Modifier) SetAttributeValueByPath(initialBlockBody *hclwrite.Body, path []string, valueToSet cty.Value) error {
+// Returns the number of modifications (0 or 1) and an error if the path is invalid,
+// any intermediate block is not found, or if the initialBlockBody itself is nil.
+func (m *Modifier) SetAttributeValueByPath(initialBlockBody *hclwrite.Body, path []string, valueToSet cty.Value) (int, error) {
 	if initialBlockBody == nil {
-		return fmt.Errorf("SetAttributeValueByPath: initialBlockBody cannot be nil")
+		return 0, fmt.Errorf("SetAttributeValueByPath: initialBlockBody cannot be nil")
 	}
 	if len(path) == 0 {
-		return fmt.Errorf("SetAttributeValueByPath: path cannot be empty")
+		return 0, fmt.Errorf("SetAttributeValueByPath: path cannot be empty")
 	}
 
 	logger := m.Logger.With(zap.Strings("path", path), zap.Any("valueToSet", valueToSet.GoString()))
@@ -828,16 +876,35 @@ func (m *Modifier) SetAttributeValueByPath(initialBlockBody *hclwrite.Body, path
 		parentBlock, err := m.GetNestedBlock(initialBlockBody, blockPath)
 		if err != nil {
 			logger.Error("SetAttributeValueByPath: Could not find parent block for attribute.", zap.Error(err))
-			return fmt.Errorf("parent block for attribute '%s' not found: %w", attributeName, err)
+			return 0, fmt.Errorf("parent block for attribute '%s' not found: %w", attributeName, err)
 		}
 		if parentBlock.Body() == nil {
 			logger.Error("SetAttributeValueByPath: Parent block has no body.", zap.Strings("blockPath", blockPath))
-			return fmt.Errorf("parent block '%s' has no body", blockPath)
+			return 0, fmt.Errorf("parent block '%s' has no body", blockPath)
 		}
 		targetBody = parentBlock.Body()
 	}
 
+	// Check if attribute already exists and if its value is the same
+	currentAttr := targetBody.GetAttribute(attributeName)
+	if currentAttr != nil {
+		currentValue, err := m.GetAttributeValue(currentAttr)
+		if err == nil { // Successfully got current value
+			// Important: cty.Value.Equals uses Go's == for non-cty types if not careful.
+			// For cty values, direct .Equals() is correct.
+			if currentValue.Equals(valueToSet).True() {
+				logger.Debug("SetAttributeValueByPath: Attribute already has the target value, no change needed.", zap.String("attributeName", attributeName))
+				return 0, nil // 0 modifications, value is already set
+			}
+		} else {
+			// Could not get current value, but attribute exists. Proceed to set.
+			// This case might indicate a complex existing attribute that GetAttributeValue can't parse,
+			// so overwriting it is a modification.
+			logger.Debug("SetAttributeValueByPath: Attribute exists but could not determine its current value. Proceeding to set.", zap.String("attributeName", attributeName), zap.Error(err))
+		}
+	}
+
 	targetBody.SetAttributeValue(attributeName, valueToSet)
-	logger.Info("SetAttributeValueByPath: Successfully set attribute.", zap.String("attributeName", attributeName))
-	return nil
+	logger.Info("SetAttributeValueByPath: Successfully set/updated attribute.", zap.String("attributeName", attributeName))
+	return 1, nil // 1 modification (attribute set or updated)
 }

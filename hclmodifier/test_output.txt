@@ -1,0 +1,639 @@
+=== RUN   TestEnhancedAttributeValueEquals
+=== RUN   TestEnhancedAttributeValueEquals/AttributeValueEquals_with_boolean_true
+=== RUN   TestEnhancedAttributeValueEquals/AttributeValueEquals_with_boolean_false
+=== RUN   TestEnhancedAttributeValueEquals/AttributeValueEquals_with_integer
+=== RUN   TestEnhancedAttributeValueEquals/AttributeValueEquals_with_float_(parsed_as_number)
+=== RUN   TestEnhancedAttributeValueEquals/AttributeValueEquals_-_condition_not_met_(bool)
+--- PASS: TestEnhancedAttributeValueEquals (0.00s)
+    --- PASS: TestEnhancedAttributeValueEquals/AttributeValueEquals_with_boolean_true (0.00s)
+    --- PASS: TestEnhancedAttributeValueEquals/AttributeValueEquals_with_boolean_false (0.00s)
+    --- PASS: TestEnhancedAttributeValueEquals/AttributeValueEquals_with_integer (0.00s)
+    --- PASS: TestEnhancedAttributeValueEquals/AttributeValueEquals_with_float_(parsed_as_number) (0.00s)
+    --- PASS: TestEnhancedAttributeValueEquals/AttributeValueEquals_-_condition_not_met_(bool) (0.00s)
+=== RUN   TestApplySetMinVersionRule
+=== RUN   TestApplySetMinVersionRule/Rule_Applies_-_min_master_version_is_added
+=== RUN   TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_min_master_version_already_present
+=== RUN   TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_node_version_is_absent
+=== RUN   TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_Neither_node_version_nor_min_master_version_present
+=== RUN   TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_Resource_type_is_not_google_container_cluster
+--- PASS: TestApplySetMinVersionRule (0.01s)
+    --- PASS: TestApplySetMinVersionRule/Rule_Applies_-_min_master_version_is_added (0.00s)
+    --- PASS: TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_min_master_version_already_present (0.00s)
+    --- PASS: TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_node_version_is_absent (0.00s)
+    --- PASS: TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_Neither_node_version_nor_min_master_version_present (0.00s)
+    --- PASS: TestApplySetMinVersionRule/Rule_Does_Not_Apply_-_Resource_type_is_not_google_container_cluster (0.00s)
+=== RUN   TestRuleSetAttributeValue
+=== RUN   TestRuleSetAttributeValue/Set_string_attribute
+=== RUN   TestRuleSetAttributeValue/Set_boolean_attribute
+=== RUN   TestRuleSetAttributeValue/Set_integer_attribute
+=== RUN   TestRuleSetAttributeValue/Set_new_attribute
+--- PASS: TestRuleSetAttributeValue (0.00s)
+    --- PASS: TestRuleSetAttributeValue/Set_string_attribute (0.00s)
+    --- PASS: TestRuleSetAttributeValue/Set_boolean_attribute (0.00s)
+    --- PASS: TestRuleSetAttributeValue/Set_integer_attribute (0.00s)
+    --- PASS: TestRuleSetAttributeValue/Set_new_attribute (0.00s)
+=== RUN   TestApplyInitialNodeCountRule
+=== RUN   TestApplyInitialNodeCountRule/BothCountsPresent
+=== RUN   TestApplyInitialNodeCountRule/OnlyInitialPresent
+=== RUN   TestApplyInitialNodeCountRule/OnlyNodeCountPresent
+=== RUN   TestApplyInitialNodeCountRule/NeitherCountPresent
+=== RUN   TestApplyInitialNodeCountRule/MultipleNodePools
+=== RUN   TestApplyInitialNodeCountRule/NoNodePools
+=== RUN   TestApplyInitialNodeCountRule/NonGKEResource
+=== RUN   TestApplyInitialNodeCountRule/EmptyHCL
+=== RUN   TestApplyInitialNodeCountRule/MultipleGKEResources
+--- PASS: TestApplyInitialNodeCountRule (0.02s)
+    --- PASS: TestApplyInitialNodeCountRule/BothCountsPresent (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/OnlyInitialPresent (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/OnlyNodeCountPresent (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/NeitherCountPresent (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/MultipleNodePools (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/NoNodePools (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/NonGKEResource (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/EmptyHCL (0.00s)
+    --- PASS: TestApplyInitialNodeCountRule/MultipleGKEResources (0.00s)
+=== RUN   TestApplyMasterCIDRRule
+=== RUN   TestApplyMasterCIDRRule/BothPresent
+=== RUN   TestApplyMasterCIDRRule/OnlyMasterCIDRPresent_PrivateConfigMissing
+=== RUN   TestApplyMasterCIDRRule/OnlyMasterCIDRPresent_SubnetworkMissingInPrivateConfig
+=== RUN   TestApplyMasterCIDRRule/OnlyPrivateEndpointSubnetworkPresent_MasterCIDRMissing
+=== RUN   TestApplyMasterCIDRRule/NeitherPresent
+=== RUN   TestApplyMasterCIDRRule/NeitherPresent_NoPrivateConfigBlock
+=== RUN   TestApplyMasterCIDRRule/NonGKEResource
+=== RUN   TestApplyMasterCIDRRule/EmptyHCL
+=== RUN   TestApplyMasterCIDRRule/MultipleGKEResources_OneMatch
+--- PASS: TestApplyMasterCIDRRule (0.02s)
+    --- PASS: TestApplyMasterCIDRRule/BothPresent (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/OnlyMasterCIDRPresent_PrivateConfigMissing (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/OnlyMasterCIDRPresent_SubnetworkMissingInPrivateConfig (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/OnlyPrivateEndpointSubnetworkPresent_MasterCIDRMissing (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/NeitherPresent (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/NeitherPresent_NoPrivateConfigBlock (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/NonGKEResource (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/EmptyHCL (0.00s)
+    --- PASS: TestApplyMasterCIDRRule/MultipleGKEResources_OneMatch (0.00s)
+=== RUN   TestApplyBinaryAuthorizationRule
+=== RUN   TestApplyBinaryAuthorizationRule/Both_enabled_and_evaluation_mode_present
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleBoth_enabled_and_evaluation_mode_present1652040399/001/test_rule3_360664724.hcl"}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleBoth_enabled_and_evaluation_mode_present1652040399/001/test_rule3_360664724.hcl"}
+2025-06-12T11:01:35.508Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "evaluation_mode"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["binary_authorization", "evaluation_mode"], "attributeName": "evaluation_mode"}
+2025-06-12T11:01:35.508Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.508Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.508Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "actionType": "RemoveAttribute", "actionPath": ["binary_authorization", "enabled"], "attributesRemoved": 1}
+2025-06-12T11:01:35.508Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Only_enabled_present
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleOnly_enabled_present3607426921/001/test_rule3_1494797409.hcl"}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleOnly_enabled_present3607426921/001/test_rule3_1494797409.hcl"}
+2025-06-12T11:01:35.510Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "evaluation_mode"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["binary_authorization", "evaluation_mode"], "attributeName": "evaluation_mode"}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["binary_authorization", "evaluation_mode"], "error": "attribute 'evaluation_mode' not found in specified block"}
+2025-06-12T11:01:35.510Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.510Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Only_evaluation_mode_present
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleOnly_evaluation_mode_present1997288925/001/test_rule3_4258299112.hcl"}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleOnly_evaluation_mode_present1997288925/001/test_rule3_4258299112.hcl"}
+2025-06-12T11:01:35.512Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["binary_authorization", "enabled"], "error": "attribute 'enabled' not found in specified block"}
+2025-06-12T11:01:35.512Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.512Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Neither_enabled_nor_evaluation_mode_present
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleNeither_enabled_nor_evaluation_mode_present1549014523/001/test_rule3_778763897.hcl"}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleNeither_enabled_nor_evaluation_mode_present1549014523/001/test_rule3_778763897.hcl"}
+2025-06-12T11:01:35.513Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["binary_authorization", "enabled"], "error": "attribute 'enabled' not found in specified block"}
+2025-06-12T11:01:35.513Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.514Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/binary_authorization_block_present_but_empty
+2025-06-12T11:01:35.515Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRulebinary_authorization_block_present_but_empty1331318910/001/test_rule3_2610688023.hcl"}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRulebinary_authorization_block_present_but_empty1331318910/001/test_rule3_2610688023.hcl"}
+2025-06-12T11:01:35.516Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["binary_authorization", "enabled"], "error": "attribute 'enabled' not found in specified block"}
+2025-06-12T11:01:35.516Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.516Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/binary_authorization_block_missing_entirely
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRulebinary_authorization_block_missing_entirely3387096374/001/test_rule3_3427393016.hcl"}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRulebinary_authorization_block_missing_entirely3387096374/001/test_rule3_3427393016.hcl"}
+2025-06-12T11:01:35.517Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["binary_authorization"], "blockName": "binary_authorization", "level": 0}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "BlockExists", "conditionPath": ["binary_authorization"], "error": "block 'binary_authorization' not found at path level 0"}
+2025-06-12T11:01:35.517Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.517Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Non-matching_resource_type_with_binary_authorization
+2025-06-12T11:01:35.519Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleNon-matching_resource_type_with_binary_authorization312918144/001/test_rule3_2885197665.hcl"}
+2025-06-12T11:01:35.519Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleNon-matching_resource_type_with_binary_authorization312918144/001/test_rule3_2885197665.hcl"}
+2025-06-12T11:01:35.519Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.519Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.519Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Multiple_GKE_resources,_one_with_conflict
+2025-06-12T11:01:35.520Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleMultiple_GKE_resources,_one_with_conflict3765269649/001/test_rule3_2998359060.hcl"}
+2025-06-12T11:01:35.520Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleMultiple_GKE_resources,_one_with_conflict3765269649/001/test_rule3_2998359060.hcl"}
+2025-06-12T11:01:35.521Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_one"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_one"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "evaluation_mode"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["binary_authorization", "evaluation_mode"], "attributeName": "evaluation_mode"}
+2025-06-12T11:01:35.521Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_one"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.521Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_one"], "actionType": "RemoveAttribute", "actionPath": ["binary_authorization", "enabled"], "attributesRemoved": 1}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_two"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_two"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["binary_authorization", "enabled"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["binary_authorization"]}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["binary_authorization", "enabled"], "attributeName": "enabled"}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_two"], "conditionType": "AttributeExists", "conditionPath": ["binary_authorization", "enabled"], "error": "attribute 'enabled' not found in specified block"}
+2025-06-12T11:01:35.521Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "gke_two"]}
+2025-06-12T11:01:35.521Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyBinaryAuthorizationRule/Empty_HCL_content
+2025-06-12T11:01:35.522Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleEmpty_HCL_content3546891531/001/test_rule3_2057677820.hcl"}
+2025-06-12T11:01:35.522Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyBinaryAuthorizationRuleEmpty_HCL_content3546891531/001/test_rule3_2057677820.hcl"}
+2025-06-12T11:01:35.522Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.522Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Binary Authorization Rule: Remove 'enabled' attribute if 'evaluation_mode' also exists in binary_authorization block", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.522Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+--- PASS: TestApplyBinaryAuthorizationRule (0.02s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Both_enabled_and_evaluation_mode_present (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Only_enabled_present (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Only_evaluation_mode_present (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Neither_enabled_nor_evaluation_mode_present (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/binary_authorization_block_present_but_empty (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/binary_authorization_block_missing_entirely (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Non-matching_resource_type_with_binary_authorization (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Multiple_GKE_resources,_one_with_conflict (0.00s)
+    --- PASS: TestApplyBinaryAuthorizationRule/Empty_HCL_content (0.00s)
+=== RUN   TestApplyServicesIPV4CIDRRule
+=== RUN   TestApplyServicesIPV4CIDRRule/Both_attributes_present_in_ip_allocation_policy
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleBoth_attributes_present_in_ip_allocation_policy594665005/001/test_rule2_3481733560.hcl"}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleBoth_attributes_present_in_ip_allocation_policy594665005/001/test_rule2_3481733560.hcl"}
+2025-06-12T11:01:35.524Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"], "attributeName": "cluster_secondary_range_name"}
+2025-06-12T11:01:35.524Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.524Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.524Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "actionType": "RemoveAttribute", "actionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributesRemoved": 1}
+2025-06-12T11:01:35.524Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Only_services_ipv4_cidr_block_present_in_ip_allocation_policy
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleOnly_services_ipv4_cidr_block_present_in_ip_allocation_policy3042332443/001/test_rule2_1207340367.hcl"}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleOnly_services_ipv4_cidr_block_present_in_ip_allocation_policy3042332443/001/test_rule2_1207340367.hcl"}
+2025-06-12T11:01:35.525Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"], "attributeName": "cluster_secondary_range_name"}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "cluster_secondary_range_name"], "error": "attribute 'cluster_secondary_range_name' not found in specified block"}
+2025-06-12T11:01:35.525Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.525Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Only_cluster_secondary_range_name_present_in_ip_allocation_policy
+2025-06-12T11:01:35.526Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleOnly_cluster_secondary_range_name_present_in_ip_allocation_policy606869311/001/test_rule2_2093955919.hcl"}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleOnly_cluster_secondary_range_name_present_in_ip_allocation_policy606869311/001/test_rule2_2093955919.hcl"}
+2025-06-12T11:01:35.527Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "error": "attribute 'services_ipv4_cidr_block' not found in specified block"}
+2025-06-12T11:01:35.527Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.527Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Neither_attribute_relevant_to_Rule_2_present_in_ip_allocation_policy
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleNeither_attribute_relevant_to_Rule_2_present_in_ip_allocation_policy2160009874/001/test_rule2_3739590578.hcl"}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleNeither_attribute_relevant_to_Rule_2_present_in_ip_allocation_policy2160009874/001/test_rule2_3739590578.hcl"}
+2025-06-12T11:01:35.528Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "error": "attribute 'services_ipv4_cidr_block' not found in specified block"}
+2025-06-12T11:01:35.528Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.528Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/ip_allocation_policy_block_is_present_but_empty
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleip_allocation_policy_block_is_present_but_empty1962366164/001/test_rule2_463810914.hcl"}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleip_allocation_policy_block_is_present_but_empty1962366164/001/test_rule2_463810914.hcl"}
+2025-06-12T11:01:35.530Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "error": "attribute 'services_ipv4_cidr_block' not found in specified block"}
+2025-06-12T11:01:35.530Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.530Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/ip_allocation_policy_block_is_missing_entirely
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleip_allocation_policy_block_is_missing_entirely1334889140/001/test_rule2_890173671.hcl"}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleip_allocation_policy_block_is_missing_entirely1334889140/001/test_rule2_890173671.hcl"}
+2025-06-12T11:01:35.531Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["ip_allocation_policy"], "blockName": "ip_allocation_policy", "level": 0}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "BlockExists", "conditionPath": ["ip_allocation_policy"], "error": "block 'ip_allocation_policy' not found at path level 0"}
+2025-06-12T11:01:35.531Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.531Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Non-matching_resource_type_with_similar_nested_structure
+2025-06-12T11:01:35.532Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleNon-matching_resource_type_with_similar_nested_structure494052456/001/test_rule2_1898036010.hcl"}
+2025-06-12T11:01:35.532Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleNon-matching_resource_type_with_similar_nested_structure494052456/001/test_rule2_1898036010.hcl"}
+2025-06-12T11:01:35.532Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.532Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.532Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Multiple_google_container_cluster_blocks,_one_matching_for_Rule_2
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleMultiple_google_container_cluster_blocks,_one_matching_for_Rule_21431566958/001/test_rule2_89599777.hcl"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleMultiple_google_container_cluster_blocks,_one_matching_for_Rule_21431566958/001/test_rule2_89599777.hcl"}
+2025-06-12T11:01:35.533Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"], "attributeName": "cluster_secondary_range_name"}
+2025-06-12T11:01:35.533Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.533Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "actionType": "RemoveAttribute", "actionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributesRemoved": 1}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"], "attributeName": "cluster_secondary_range_name"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "cluster_secondary_range_name"], "error": "attribute 'cluster_secondary_range_name' not found in specified block"}
+2025-06-12T11:01:35.533Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.533Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Multiple_google_container_cluster_blocks,_ip_policy_missing_in_one
+2025-06-12T11:01:35.535Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleMultiple_google_container_cluster_blocks,_ip_policy_missing_in_one2399209932/001/test_rule2_2401527884.hcl"}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleMultiple_google_container_cluster_blocks,_ip_policy_missing_in_one2399209932/001/test_rule2_2401527884.hcl"}
+2025-06-12T11:01:35.536Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "alpha"]}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "alpha"]}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["ip_allocation_policy"], "blockName": "ip_allocation_policy", "level": 0}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "alpha"], "conditionType": "BlockExists", "conditionPath": ["ip_allocation_policy"], "error": "block 'ip_allocation_policy' not found at path level 0"}
+2025-06-12T11:01:35.536Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "alpha"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "beta"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "beta"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "cluster_secondary_range_name"], "attributeName": "cluster_secondary_range_name"}
+2025-06-12T11:01:35.537Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "beta"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.537Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributeName": "services_ipv4_cidr_block"}
+2025-06-12T11:01:35.537Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "beta"], "actionType": "RemoveAttribute", "actionPath": ["ip_allocation_policy", "services_ipv4_cidr_block"], "attributesRemoved": 1}
+2025-06-12T11:01:35.537Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyServicesIPV4CIDRRule/Empty_HCL_content
+2025-06-12T11:01:35.539Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleEmpty_HCL_content2452600183/001/test_rule2_3805557176.hcl"}
+2025-06-12T11:01:35.539Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyServicesIPV4CIDRRuleEmpty_HCL_content2452600183/001/test_rule2_3805557176.hcl"}
+2025-06-12T11:01:35.539Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.539Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Services IPV4 CIDR Rule: Remove services_ipv4_cidr_block if cluster_secondary_range_name (for services) exists in ip_allocation_policy", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.539Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+--- PASS: TestApplyServicesIPV4CIDRRule (0.02s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Both_attributes_present_in_ip_allocation_policy (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Only_services_ipv4_cidr_block_present_in_ip_allocation_policy (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Only_cluster_secondary_range_name_present_in_ip_allocation_policy (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Neither_attribute_relevant_to_Rule_2_present_in_ip_allocation_policy (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/ip_allocation_policy_block_is_present_but_empty (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/ip_allocation_policy_block_is_missing_entirely (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Non-matching_resource_type_with_similar_nested_structure (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Multiple_google_container_cluster_blocks,_one_matching_for_Rule_2 (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Multiple_google_container_cluster_blocks,_ip_policy_missing_in_one (0.00s)
+    --- PASS: TestApplyServicesIPV4CIDRRule/Empty_HCL_content (0.00s)
+=== RUN   TestApplyClusterIPV4CIDRRule
+=== RUN   TestApplyClusterIPV4CIDRRule/Both_attributes_present
+2025-06-12T11:01:35.540Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleBoth_attributes_present2111556993/001/test_1404724006.hcl"}
+2025-06-12T11:01:35.540Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleBoth_attributes_present2111556993/001/test_1404724006.hcl"}
+2025-06-12T11:01:35.541Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "attributeName": "cluster_ipv4_cidr_block"}
+2025-06-12T11:01:35.541Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.541Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.541Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.541Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "actionType": "RemoveAttribute", "actionPath": ["cluster_ipv4_cidr"], "attributesRemoved": 1}
+2025-06-12T11:01:35.541Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Only_cluster_ipv4_cidr_present_(no_ip_allocation_policy_block)
+2025-06-12T11:01:35.542Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_cluster_ipv4_cidr_present_(no_ip_allocation_policy_block)871843810/001/test_330647975.hcl"}
+2025-06-12T11:01:35.542Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_cluster_ipv4_cidr_present_(no_ip_allocation_policy_block)871843810/001/test_330647975.hcl"}
+2025-06-12T11:01:35.543Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["ip_allocation_policy"], "blockName": "ip_allocation_policy", "level": 0}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "BlockExists", "conditionPath": ["ip_allocation_policy"], "error": "block 'ip_allocation_policy' not found at path level 0"}
+2025-06-12T11:01:35.543Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.543Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Only_cluster_ipv4_cidr_present_(ip_allocation_policy_block_exists_but_no_cluster_ipv4_cidr_block)
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_cluster_ipv4_cidr_present_(ip_allocation_policy_block_exists_but_no_cluster_ipv4_cidr_block)2643351523/001/test_1849785181.hcl"}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_cluster_ipv4_cidr_present_(ip_allocation_policy_block_exists_but_no_cluster_ipv4_cidr_block)2643351523/001/test_1849785181.hcl"}
+2025-06-12T11:01:35.544Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "attributeName": "cluster_ipv4_cidr_block"}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "error": "attribute 'cluster_ipv4_cidr_block' not found in specified block"}
+2025-06-12T11:01:35.544Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.544Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Only_ip_allocation_policy.cluster_ipv4_cidr_block_present
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_ip_allocation_policy.cluster_ipv4_cidr_block_present2759532641/001/test_3300663621.hcl"}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleOnly_ip_allocation_policy.cluster_ipv4_cidr_block_present2759532641/001/test_3300663621.hcl"}
+2025-06-12T11:01:35.545Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["cluster_ipv4_cidr"], "error": "attribute 'cluster_ipv4_cidr' not found in specified block"}
+2025-06-12T11:01:35.545Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.545Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Neither_attribute_relevant_to_Rule_1_present
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleNeither_attribute_relevant_to_Rule_1_present1432102269/001/test_1857554183.hcl"}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleNeither_attribute_relevant_to_Rule_1_present1432102269/001/test_1857554183.hcl"}
+2025-06-12T11:01:35.546Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "AttributeExists", "conditionPath": ["cluster_ipv4_cidr"], "error": "attribute 'cluster_ipv4_cidr' not found in specified block"}
+2025-06-12T11:01:35.546Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.546Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/ip_allocation_policy_block_is_missing_entirely,_cluster_ipv4_cidr_present
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleip_allocation_policy_block_is_missing_entirely,_cluster_ipv4_cidr_present2526905673/001/test_478929146.hcl"}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleip_allocation_policy_block_is_missing_entirely,_cluster_ipv4_cidr_present2526905673/001/test_478929146.hcl"}
+2025-06-12T11:01:35.548Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["ip_allocation_policy"], "blockName": "ip_allocation_policy", "level": 0}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "BlockExists", "conditionPath": ["ip_allocation_policy"], "error": "block 'ip_allocation_policy' not found at path level 0"}
+2025-06-12T11:01:35.548Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.548Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Non-matching_resource_type_(google_compute_instance)
+2025-06-12T11:01:35.549Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleNon-matching_resource_type_(google_compute_instance)42009625/001/test_307304788.hcl"}
+2025-06-12T11:01:35.549Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleNon-matching_resource_type_(google_compute_instance)42009625/001/test_307304788.hcl"}
+2025-06-12T11:01:35.549Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.549Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.549Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Multiple_google_container_cluster_blocks,_one_matching
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleMultiple_google_container_cluster_blocks,_one_matching1245458028/001/test_3695972627.hcl"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleMultiple_google_container_cluster_blocks,_one_matching1245458028/001/test_3695972627.hcl"}
+2025-06-12T11:01:35.551Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "attributeName": "cluster_ipv4_cidr_block"}
+2025-06-12T11:01:35.551Z	INFO	hclmodifier/modifier.go:499	All conditions met for resource. Performing actions on the resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:316	RemoveAttributeByPath: Attempting to remove attribute.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.551Z	INFO	hclmodifier/modifier.go:351	RemoveAttributeByPath: Successfully removed attribute.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.551Z	INFO	hclmodifier/modifier.go:701	Action RemoveAttribute successful.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "actionType": "RemoveAttribute", "actionPath": ["cluster_ipv4_cidr"], "attributesRemoved": 1}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:240	GetNestedBlock: Successfully found nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "attributeName": "cluster_ipv4_cidr_block"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"], "conditionType": "AttributeExists", "conditionPath": ["ip_allocation_policy", "cluster_ipv4_cidr_block"], "error": "attribute 'cluster_ipv4_cidr_block' not found in specified block"}
+2025-06-12T11:01:35.551Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.551Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 1, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Multiple_google_container_cluster_blocks,_none_matching
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleMultiple_google_container_cluster_blocks,_none_matching982042861/001/test_3542004335.hcl"}
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleMultiple_google_container_cluster_blocks,_none_matching982042861/001/test_3542004335.hcl"}
+2025-06-12T11:01:35.552Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.552Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:295	GetAttributeValueByPath: Successfully retrieved attribute value.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:211	GetNestedBlock: Attempting to find nested block.	{"path": ["ip_allocation_policy"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:230	GetNestedBlock: Block not found at current level.	{"path": ["ip_allocation_policy"], "blockName": "ip_allocation_policy", "level": 0}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:603	Condition BlockExists not met (block not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"], "conditionType": "BlockExists", "conditionPath": ["ip_allocation_policy"], "error": "block 'ip_allocation_policy' not found at path level 0"}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "primary"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:482	Target resource matched.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:487	Executing as Standard Rule. Checking conditions for the resource block itself.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:262	GetAttributeValueByPath: Attempting to get attribute value.	{"path": ["cluster_ipv4_cidr"]}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:285	GetAttributeValueByPath: Attribute not found.	{"path": ["cluster_ipv4_cidr"], "attributeName": "cluster_ipv4_cidr"}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:587	Condition AttributeExists not met (attribute not found or error accessing).	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"], "conditionType": "AttributeExists", "conditionPath": ["cluster_ipv4_cidr"], "error": "attribute 'cluster_ipv4_cidr' not found in specified block"}
+2025-06-12T11:01:35.553Z	DEBUG	hclmodifier/modifier.go:510	Not all conditions met for resource block.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster", "executionType": "Standard", "resourceLabels": ["google_container_cluster", "secondary"]}
+2025-06-12T11:01:35.553Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+=== RUN   TestApplyClusterIPV4CIDRRule/Empty_HCL_content
+2025-06-12T11:01:35.554Z	DEBUG	hclmodifier/modifier.go:37	Reading HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleEmpty_HCL_content2601676809/001/test_542214634.hcl"}
+2025-06-12T11:01:35.554Z	DEBUG	hclmodifier/modifier.go:44	Parsing HCL file	{"filePath": "/tmp/TestApplyClusterIPV4CIDRRuleEmpty_HCL_content2601676809/001/test_542214634.hcl"}
+2025-06-12T11:01:35.554Z	INFO	hclmodifier/modifier.go:441	Starting ApplyRules processing.	{"numberOfRules": 1}
+2025-06-12T11:01:35.554Z	DEBUG	hclmodifier/modifier.go:453	Processing rule.	{"ruleName": "Cluster IPV4 CIDR Rule: Remove top-level cluster_ipv4_cidr if ip_allocation_policy.cluster_ipv4_cidr_block exists", "targetResourceType": "google_container_cluster"}
+2025-06-12T11:01:35.554Z	INFO	hclmodifier/modifier.go:562	ApplyRules processing finished.	{"totalModifications": 0, "numberOfErrors": 0}
+--- PASS: TestApplyClusterIPV4CIDRRule (0.01s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Both_attributes_present (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Only_cluster_ipv4_cidr_present_(no_ip_allocation_policy_block) (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Only_cluster_ipv4_cidr_present_(ip_allocation_policy_block_exists_but_no_cluster_ipv4_cidr_block) (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Only_ip_allocation_policy.cluster_ipv4_cidr_block_present (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Neither_attribute_relevant_to_Rule_1_present (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/ip_allocation_policy_block_is_missing_entirely,_cluster_ipv4_cidr_present (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Non-matching_resource_type_(google_compute_instance) (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Multiple_google_container_cluster_blocks,_one_matching (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Multiple_google_container_cluster_blocks,_none_matching (0.00s)
+    --- PASS: TestApplyClusterIPV4CIDRRule/Empty_HCL_content (0.00s)
+=== RUN   TestApplyAutopilotRule
+=== RUN   TestApplyAutopilotRule/enable_autopilot_is_true,_all_conflicting_fields_present
+=== RUN   TestApplyAutopilotRule/enable_autopilot_is_false,_conflicting_fields_present
+=== RUN   TestApplyAutopilotRule/enable_autopilot_not_present,_conflicting_fields_present
+=== RUN   TestApplyAutopilotRule/enable_autopilot_is_true,_no_conflicting_fields_present
+=== RUN   TestApplyAutopilotRule/enable_autopilot_is_not_a_boolean
+=== RUN   TestApplyAutopilotRule/No_google_container_cluster_blocks
+=== RUN   TestApplyAutopilotRule/Empty_HCL_content
+=== RUN   TestApplyAutopilotRule/Autopilot_true,_only_some_attributes_to_remove
+--- PASS: TestApplyAutopilotRule (0.01s)
+    --- PASS: TestApplyAutopilotRule/enable_autopilot_is_true,_all_conflicting_fields_present (0.00s)
+    --- PASS: TestApplyAutopilotRule/enable_autopilot_is_false,_conflicting_fields_present (0.00s)
+    --- PASS: TestApplyAutopilotRule/enable_autopilot_not_present,_conflicting_fields_present (0.00s)
+    --- PASS: TestApplyAutopilotRule/enable_autopilot_is_true,_no_conflicting_fields_present (0.00s)
+    --- PASS: TestApplyAutopilotRule/enable_autopilot_is_not_a_boolean (0.00s)
+    --- PASS: TestApplyAutopilotRule/No_google_container_cluster_blocks (0.00s)
+    --- PASS: TestApplyAutopilotRule/Empty_HCL_content (0.00s)
+    --- PASS: TestApplyAutopilotRule/Autopilot_true,_only_some_attributes_to_remove (0.00s)
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_be_removed_when_telemetry_is_ENABLED
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_when_telemetry_is_DISABLED
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_when_telemetry_block_is_missing
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_if_logging_service_attribute_is_missing
+=== RUN   TestModifier_ApplyRuleRemoveLoggingService/Non-GKE_resource_with_similar_structure,_should_not_be_modified
+--- PASS: TestModifier_ApplyRuleRemoveLoggingService (0.01s)
+    --- PASS: TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_be_removed_when_telemetry_is_ENABLED (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_when_telemetry_is_DISABLED (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_when_telemetry_block_is_missing (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveLoggingService/logging_service_should_NOT_be_removed_if_logging_service_attribute_is_missing (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveLoggingService/Non-GKE_resource_with_similar_structure,_should_not_be_modified (0.00s)
+=== RUN   TestModifier_ApplyRuleRemoveMonitoringService
+=== RUN   TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_be_removed_when_monitoring_config_block_exists
+=== RUN   TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_NOT_be_removed_when_monitoring_config_block_is_missing
+=== RUN   TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_NOT_be_removed_if_monitoring_service_attribute_is_missing
+=== RUN   TestModifier_ApplyRuleRemoveMonitoringService/Non-GKE_resource_with_similar_structure,_should_not_be_modified
+--- PASS: TestModifier_ApplyRuleRemoveMonitoringService (0.01s)
+    --- PASS: TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_be_removed_when_monitoring_config_block_exists (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_NOT_be_removed_when_monitoring_config_block_is_missing (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveMonitoringService/monitoring_service_should_NOT_be_removed_if_monitoring_service_attribute_is_missing (0.00s)
+    --- PASS: TestModifier_ApplyRuleRemoveMonitoringService/Non-GKE_resource_with_similar_structure,_should_not_be_modified (0.00s)
+PASS
+ok  	github.com/kotatut/cluster_import_cleaner/hclmodifier	0.126s
