@@ -2159,13 +2159,10 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           false, // Changed to false
-				// The following fields are now irrelevant as the block is removed.
-				// Setting them to false/nil or removing them if the struct definition allows.
-				// For safety, let's explicitly set them to reflect they are not expected.
-				expectEnabledRemoved:        false,
-				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:      nil, // stringPtr("BALANCED") changed to nil
+				expectBlockExists:           true,  // It should exist
+				expectEnabledRemoved:        false, // The 'enabled' attribute within it should not be removed
+				expectResourceLimitsRemoved: false, // resource_limits is not present in this HCL, so this is fine
+				expectProfileUnchanged:      stringPtr("BALANCED"), // Profile should be "BALANCED"
 			},
 			binaryAuthorization:  nil,
 			expectNoOtherChanges: true,
@@ -2222,10 +2219,10 @@ func TestApplyAutopilotRule(t *testing.T) {
 				expectHttpLoadBalancingUnchanged: true,
 			},
 			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,
-				expectEnabledRemoved:        false,
-				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:      stringPtr("BALANCED"),
+				expectBlockExists:           false,
+				expectEnabledRemoved:        false, // This was already false
+				expectResourceLimitsRemoved: false, // This was already false
+				expectProfileUnchanged:      nil,   // This was already nil
 			},
 			binaryAuthorization: &binaryAuthorizationChecks{
 				expectBlockExists:    true,
