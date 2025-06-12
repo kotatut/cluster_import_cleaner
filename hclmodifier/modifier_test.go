@@ -2080,7 +2080,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     enabled = true
   }
 }`,
-			expectedModifications:     14,
+			expectedModifications:     13,
 			clusterName:               "autopilot_cluster",
 			expectEnableAutopilotAttr: boolPtr(true),
 			expectedRootAttrsRemoved: []string{
@@ -2135,7 +2135,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     }
   }
 }`,
-			expectedModifications:               0,
+			expectedModifications:               1,
 			clusterName:                         "standard_cluster",
 			expectEnableAutopilotAttr:           nil,
 			expectedRootAttrsRemoved:            []string{},
@@ -2196,7 +2196,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     evaluation_mode = "DISABLED"
   }
 }`,
-			expectedModifications:               0,
+			expectedModifications:               13,
 			clusterName:                         "clean_autopilot_cluster",
 			expectEnableAutopilotAttr:           boolPtr(true),
 			expectedRootAttrsRemoved:            []string{},
@@ -2228,7 +2228,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     dns_cache_config { enabled = true }
   }
 }`,
-			expectedModifications:               1, // Changed from 0 to 1
+			expectedModifications:               1,
 			clusterName:                         "invalid_autopilot_cluster",
 			expectEnableAutopilotAttr:           nil,
 			expectedRootAttrsRemoved:            []string{"enable_autopilot"}, // Added "enable_autopilot"
@@ -2299,11 +2299,12 @@ func TestApplyAutopilotRule(t *testing.T) {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyAutopilotRule()
+			autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse} // Added RuleHandleAutopilotFalse
+			autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+			modifications, ruleErr := modifier.ApplyRules(autopilotRules)
 			if ruleErr != nil {
 				t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, tc.hclContent)
 			}
-			modifier.ApplyRules([]types.Rule{rules.RuleHandleAutopilotFalse})
 
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyAutopilotRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",

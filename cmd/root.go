@@ -74,9 +74,8 @@ or older templates. The tool modifies the file in-place.`,
 			rules.OsVersionRuleDefinition,
 			rules.InitialNodeCountRuleDefinition, // Added InitialNodeCountRuleDefinition
 			rules.RuleHandleAutopilotFalse,       // Added RuleHandleAutopilotFalse
-			// Note: AutopilotRule is handled separately below
-			// due to its complex logic not yet fully translated to the generic rule engine.
 		}
+		allRules = append(allRules, rules.AutopilotRules...) // Append elements of AutopilotRules
 
 		var encounteredErrors []error
 
@@ -87,16 +86,8 @@ or older templates. The tool modifies the file in-place.`,
 		}
 		logger.Info("Generic rules application completed", zap.Int("totalModifications", modifications), zap.String("filePath", filePathFlag))
 
-		// 3. Apply rules that have complex logic not yet fitting the generic engine.
-		// Apply Autopilot Rule (Complex: Conditional logic based on attribute values, multiple different removals)
-		logger.Info("Applying Autopilot Rule (custom logic)...")
-		autopilotModifications, err := hclFile.ApplyAutopilotRule() // Capture modifications
-		if err != nil {
-			encounteredErrors = append(encounteredErrors, fmt.Errorf("AutopilotRule failed: %w", err))
-		}
-		logger.Info("Autopilot rule application completed", zap.Int("modifications", autopilotModifications), zap.String("filePath", filePathFlag))
-
-		// 4. Write the modified HCL content back to the file.
+		// 3. Write the modified HCL content back to the file.
+		// 3. Write the modified HCL content back to the file.
 		// This should happen regardless of rule application errors, as some rules might have succeeded.
 		err = hclFile.WriteToFile(filePathFlag)
 		if err != nil {
@@ -104,7 +95,7 @@ or older templates. The tool modifies the file in-place.`,
 			return fmt.Errorf("failed to write modified HCL file: %w", err)
 		}
 
-		// 5. Report any errors encountered during rule processing.
+		// 4. Report any errors encountered during rule processing.
 		if len(encounteredErrors) > 0 {
 			logger.Error("One or more rules encountered errors during processing file.", zap.String("filePath", filePathFlag))
 			for _, ruleErr := range encounteredErrors {
