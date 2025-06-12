@@ -1,10 +1,6 @@
-package hclmodifier
+package rules
 
 import (
-	"fmt"
-
-	"go.uber.org/zap"
-
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
 )
 

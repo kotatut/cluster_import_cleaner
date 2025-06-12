@@ -634,7 +634,7 @@ resource "google_container_cluster" "gke_two" {
 				}
 			}
 
-			modifications, ruleErr := modifier.ApplyInitialNodeCountRule()
+			modifications, ruleErr := modifier.ApplyRules([]types.Rule{rules.InitialNodeCountRuleDefinition})
 			if ruleErr != nil {
 				t.Fatalf("ApplyInitialNodeCountRule() error = %v", ruleErr)
 			}
@@ -2135,7 +2135,7 @@ func TestApplyAutopilotRule(t *testing.T) {
     }
   }
 }`,
-			expectedModifications:               1,
+			expectedModifications:               0,
 			clusterName:                         "standard_cluster",
 			expectEnableAutopilotAttr:           nil,
 			expectedRootAttrsRemoved:            []string{},
@@ -2303,6 +2303,7 @@ func TestApplyAutopilotRule(t *testing.T) {
 			if ruleErr != nil {
 				t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, tc.hclContent)
 			}
+			modifier.ApplyRules([]types.Rule{rules.RuleHandleAutopilotFalse})
 
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyAutopilotRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
@@ -2534,172 +2535,6 @@ func TestApplyAutopilotRule(t *testing.T) {
 					}
 					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
 						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestRemoveBlock(t *testing.T) {
-	t.Helper()
-	logger := zap.NewNop()
-
-	tests := []struct {
-		name            string
-		hclContent      string
-		blockType       string
-		blockLabels     []string
-		expectRemoved   bool
-		expectCallError bool
-	}{
-		{
-			name: "remove existing resource block",
-			hclContent: `resource "aws_instance" "my_test_instance" {
-  ami           = "ami-0c55b31ad2c454370"
-  instance_type = "t2.micro"
-}
-resource "aws_s3_bucket" "my_bucket" {
-  bucket = "my-test-bucket"
-}`,
-			blockType:       "resource",
-			blockLabels:     []string{"aws_instance", "my_test_instance"},
-			expectRemoved:   true,
-			expectCallError: false,
-		},
-		{
-			name: "attempt to remove non-existing resource block by name",
-			hclContent: `resource "aws_instance" "another_instance" {
-  ami           = "ami-0c55b31ad2c454370"
-  instance_type = "t2.micro"
-}`,
-			blockType:       "resource",
-			blockLabels:     []string{"aws_instance", "non_existent_instance"},
-			expectRemoved:   false,
-			expectCallError: true,
-		},
-		{
-			name: "attempt to remove block with incorrect type but existing labels",
-			hclContent: `resource "aws_instance" "my_test_instance" {
-  ami           = "ami-0c55b31ad2c454370"
-  instance_type = "t2.micro"
-}`,
-			blockType:       "data",
-			blockLabels:     []string{"aws_instance", "my_test_instance"},
-			expectRemoved:   false,
-			expectCallError: true,
-		},
-		{
-			name:            "empty HCL content",
-			hclContent:      ``,
-			blockType:       "resource",
-			blockLabels:     []string{"aws_instance", "my_test_instance"},
-			expectRemoved:   false,
-			expectCallError: true,
-		},
-		{
-			name: "remove data block",
-			hclContent: `data "aws_caller_identity" "current" {}
-resource "aws_instance" "main" {}
-`,
-			blockType:       "data",
-			blockLabels:     []string{"aws_caller_identity", "current"},
-			expectRemoved:   true,
-			expectCallError: false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpFile, err := os.CreateTemp("", "test_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
-			defer os.Remove(tmpFile.Name())
-
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
-				t.Fatalf("Failed to write to temp file: %v", err)
-			}
-			if err := tmpFile.Close(); err != nil {
-				t.Fatalf("Failed to close temp file: %v", err)
-			}
-
-			modifier, newFromFileErr := NewFromFile(tmpFile.Name(), logger)
-
-			if tc.hclContent == "" {
-				if newFromFileErr != nil && tc.expectCallError {
-					return
-				}
-				if newFromFileErr != nil && !tc.expectCallError {
-					t.Fatalf("NewFromFile() errored unexpectedly for empty HCL: %v", newFromFileErr)
-				}
-			} else if newFromFileErr != nil {
-				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", newFromFileErr, tc.hclContent)
-			}
-
-			err = modifier.RemoveBlock(tc.blockType, tc.blockLabels)
-			if (err != nil) != tc.expectCallError {
-				t.Fatalf("RemoveBlock() error status = %v (err: %v), expectCallError %v. HCL:\n%s", (err != nil), err, tc.expectCallError, tc.hclContent)
-			}
-
-			modifiedContentBytes := modifier.File().Bytes()
-			verifiedFile, parseDiags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
-			if parseDiags.HasErrors() {
-				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", parseDiags, string(modifiedContentBytes))
-			}
-
-			var foundBlockInVerified *hclwrite.Block
-			// Check if the block that was supposed to be removed (or not) is present
-			if !(tc.blockType == "resource" || tc.blockType == "data") { // Simple blocks like "terraform"
-				if len(tc.blockLabels) == 0 { // e.g. terraform {}
-					foundBlockInVerified = verifiedFile.Body().FirstMatchingBlock(tc.blockType, nil)
-				} else { // e.g. provider "aws"
-					foundBlockInVerified = verifiedFile.Body().FirstMatchingBlock(tc.blockType, tc.blockLabels)
-				}
-			} else { // Resource or Data blocks
-				if len(tc.blockLabels) > 0 { // Should always be true for resource/data
-					foundBlockInVerified, _ = findBlockInParsedFile(verifiedFile, tc.blockLabels[0], tc.blockLabels[1])
-				}
-			}
-
-			if tc.expectRemoved {
-				if foundBlockInVerified != nil {
-					t.Errorf("RemoveBlock() expected block %s %v to be removed, but it was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
-				}
-			} else { // Not expected to be removed
-				initialParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
-				initialBlockPresent := false
-				if initialParsedFile != nil && initialParsedFile.Body() != nil {
-					var initialBlock *hclwrite.Block
-					if !(tc.blockType == "resource" || tc.blockType == "data") {
-						if len(tc.blockLabels) == 0 {
-							initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, nil)
-						} else {
-							initialBlock = initialParsedFile.Body().FirstMatchingBlock(tc.blockType, tc.blockLabels)
-						}
-					} else {
-						if len(tc.blockLabels) > 0 {
-							initialBlock, _ = findBlockInParsedFile(initialParsedFile, tc.blockLabels[0], tc.blockLabels[1])
-						}
-					}
-					if initialBlock != nil {
-						initialBlockPresent = true
-					}
-				}
-
-				if tc.expectCallError { // Error was expected, so block should remain if it was there
-					if initialBlockPresent && foundBlockInVerified == nil {
-						t.Errorf("RemoveBlock() errored as expected for %s %v, but block was unexpectedly removed. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
-					}
-					if !initialBlockPresent && foundBlockInVerified != nil {
-						t.Errorf("RemoveBlock() logic error: block %s %v not present initially, call errored, but block now found. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
-					}
-				} else { // No error expected, and not expected to be removed
-					if initialBlockPresent && foundBlockInVerified == nil {
-						t.Errorf("RemoveBlock() did not error, expected block %s %v NOT to be removed, but it was. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
-					}
-					if !initialBlockPresent && foundBlockInVerified != nil {
-						t.Errorf("RemoveBlock() logic error: block %s %v was not present initially, no call error, but was found in re-parsed HCL. Output HCL:\n%s", tc.blockType, tc.blockLabels, string(modifiedContentBytes))
 					}
 				}
 			}

@@ -6,8 +6,6 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite" // Required for hclwrite.Block type hint if used
 	"github.com/zclconf/go-cty/cty"
 	"go.uber.org/zap"
-
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types" // Import for type definitions
 )
 
 // ApplyAutopilotRule cleans a `google_container_cluster` resource configuration based on the `enable_autopilot` attribute.
