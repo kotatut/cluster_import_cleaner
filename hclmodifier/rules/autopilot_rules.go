@@ -2,7 +2,6 @@ package rules
 
 import (
 	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
-	"github.com/zclconf/go-cty/cty" // Added import for cty
 )
 
 // RuleHandleAutopilotFalse defines a rule to clean up 'enable_autopilot'
@@ -79,8 +78,8 @@ var AutopilotRules = []types.Rule{
 		TargetResourceType: "google_container_cluster",
 		Conditions: []types.RuleCondition{
 			{
-				Type: types.AttributeTypeIsNot,
-				Path: []string{"enable_autopilot"},
+				Type:                     types.AttributeTypeIsNot,
+				Path:                     []string{"enable_autopilot"},
 				ExpectedTypeFriendlyName: "bool",
 			},
 		},
