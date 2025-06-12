@@ -597,6 +597,23 @@ func (m *Modifier) checkCondition(initialBlockBody *hclwrite.Body, condition typ
 			condLogger.Debug("Condition NullValue not met.", zap.Error(err), zap.Bool("isNull", val.IsNull()))
 			return false
 		}
+	case types.AttributeTypeIsNot:
+		val, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err != nil {
+			// Attribute not found or other error, so it's not of the specified type (or doesn't exist to have a type)
+			// Depending on strictness, "not existing" could be true for "IsNotType".
+			// Current requirement: "If the attribute does not exist, this condition should probably return false"
+			// This means the attribute MUST exist to be evaluated.
+			condLogger.Debug("AttributeTypeIsNot: Attribute not found, condition returns false.", zap.Error(err))
+			return false
+		}
+		actualTypeFriendlyName := val.Type().FriendlyName()
+		if actualTypeFriendlyName != condition.ExpectedTypeFriendlyName {
+			condLogger.Debug("AttributeTypeIsNot met.", zap.String("actualType", actualTypeFriendlyName), zap.String("expectedToNotBe", condition.ExpectedTypeFriendlyName))
+			return true // Types are different, so condition is true
+		}
+		condLogger.Debug("AttributeTypeIsNot not met.", zap.String("actualType", actualTypeFriendlyName), zap.String("expectedToNotBe", condition.ExpectedTypeFriendlyName))
+		return false // Types are the same, so condition is false
 	case types.AttributeValueEquals:
 		// Checks if an attribute at condition.Path exists and its value equals condition.ExpectedValue.
 		// Comparison logic attempts to parse ExpectedValue based on the actual attribute's type.
@@ -674,6 +691,69 @@ func (m *Modifier) performAction(initialBlockBody *hclwrite.Body, action types.R
 		if errAction == nil {
 			actLogger.Info("Action RemoveBlock successful.")
 		}
+	case types.RemoveAllBlocksOfType:
+		actLogger.Debug("Performing RemoveAllBlocksOfType", zap.String("blockTypeToRemove", action.BlockTypeToRemove))
+		blocksToRemove := []*hclwrite.Block{}
+		for _, b := range initialBlockBody.Blocks() {
+			if b.Type() == action.BlockTypeToRemove {
+				blocksToRemove = append(blocksToRemove, b)
+			}
+		}
+		if len(blocksToRemove) == 0 {
+			actLogger.Debug("No blocks found matching type, no action needed.", zap.String("blockTypeToRemove", action.BlockTypeToRemove))
+			// Return nil because no error, but also no modification in this specific case.
+			// The modification counter in ApplyRules increments if errAction is nil.
+			// To prevent incorrect counting, we could return a specific error or handle count more granularly.
+			// For now, this will count as a "successful" (no-error) action.
+			return nil
+		}
+		for _, b := range blocksToRemove {
+			initialBlockBody.RemoveBlock(b)
+			actLogger.Info("Removed block of type", zap.String("removedBlockType", b.Type()), zap.Strings("blockLabels", b.Labels()))
+		}
+		errAction = nil // Explicitly set to nil as modifications were made
+	case types.RemoveAllNestedBlocksMatchingPath:
+		actLogger.Debug("Performing RemoveAllNestedBlocksMatchingPath", zap.Strings("path", action.Path))
+		if len(action.Path) == 0 {
+			errAction = fmt.Errorf("RemoveAllNestedBlocksMatchingPath: action.Path cannot be empty")
+			break
+		}
+		nestedBlockTypeToRemove := action.Path[len(action.Path)-1]
+		parentBlockPath := action.Path[:len(action.Path)-1]
+
+		var parentBlockBody *hclwrite.Body
+		if len(parentBlockPath) == 0 {
+			parentBlockBody = initialBlockBody
+		} else {
+			parentBlock, err := m.GetNestedBlock(initialBlockBody, parentBlockPath)
+			if err != nil {
+				errAction = fmt.Errorf("could not find parent block for RemoveAllNestedBlocksMatchingPath: %w", err)
+				break
+			}
+			if parentBlock.Body() == nil {
+				errAction = fmt.Errorf("parent block '%s' has no body for RemoveAllNestedBlocksMatchingPath", parentBlockPath)
+				break
+			}
+			parentBlockBody = parentBlock.Body()
+		}
+
+		blocksToRemoveInNested := []*hclwrite.Block{}
+		for _, b := range parentBlockBody.Blocks() {
+			if b.Type() == nestedBlockTypeToRemove {
+				blocksToRemoveInNested = append(blocksToRemoveInNested, b)
+			}
+		}
+
+		if len(blocksToRemoveInNested) == 0 {
+			actLogger.Debug("No nested blocks found matching type in parent, no action needed.", zap.String("nestedBlockTypeToRemove", nestedBlockTypeToRemove))
+			return nil // No error, no modification.
+		}
+
+		for _, b := range blocksToRemoveInNested {
+			parentBlockBody.RemoveBlock(b)
+			actLogger.Info("Removed nested block of type", zap.String("removedNestedBlockType", b.Type()), zap.Strings("parentPath", parentBlockPath))
+		}
+		errAction = nil // Explicitly set to nil as modifications were made
 	case types.SetAttributeValue:
 		// Sets an attribute at action.Path within initialBlockBody to a specified value.
 		// The value can be derived from action.ValueToSet (parsed string) or action.PathToSet (another attribute's value).

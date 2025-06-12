@@ -13,6 +13,7 @@ const (
 	BlockExists           ConditionType = "BlockExists"           // BlockExists checks if a specific block exists at the given path.
 	AttributeValueEquals  ConditionType = "AttributeValueEquals"  // AttributeValueEquals checks if a specific attribute at the given path has a certain value.
 	NullValue             ConditionType = "NullValue"             // NullValue verifies that value is "null"
+	AttributeTypeIsNot ConditionType = "AttributeTypeIsNot" // AttributeTypeIsNot checks if a specific attribute at the given path is NOT of a certain cty.Type.
 )
 
 // ActionType is an enumeration defining the types of actions that can be performed by a Rule.
@@ -22,6 +23,8 @@ const (
 	RemoveAttribute   ActionType = "RemoveAttribute"   // RemoveAttribute removes a specific attribute at the given path.
 	RemoveBlock       ActionType = "RemoveBlock"       // RemoveBlock removes a specific block at the given path.
 	SetAttributeValue ActionType = "SetAttributeValue" // SetAttributeValue sets a specific attribute at the given path to a certain value.
+	RemoveAllBlocksOfType ActionType = "RemoveAllBlocksOfType" // RemoveAllBlocksOfType removes all blocks of a specific type from the parent block.
+	RemoveAllNestedBlocksMatchingPath ActionType = "RemoveAllNestedBlocksMatchingPath" // Removes all nested blocks matching a given path.
 )
 
 // RuleExecutionType defines how a rule should be executed.
@@ -49,6 +52,9 @@ type RuleCondition struct {
 	// ExpectedValue is the string representation of the value to compare against for AttributeValueEquals.
 	// This string will be parsed into a cty.Value for comparison during rule processing.
 	ExpectedValue string
+	// ExpectedTypeFriendlyName is used with AttributeTypeIsNot to specify the type it should not be (e.g., "bool", "string", "number").
+	// The engine will compare this against cty.Type.FriendlyName().
+	ExpectedTypeFriendlyName string
 }
 
 // RuleAction defines an action to be performed on an HCL structure if all conditions of a Rule are met.
@@ -65,6 +71,8 @@ type RuleAction struct {
 	ValueToSet string
 	// PathToSet is a slice of strings representing the hierarchical path to the attribute to set as Value.
 	PathToSet []string
+	// BlockTypeToRemove specifies the type of block to remove for the RemoveAllBlocksOfType action.
+	BlockTypeToRemove string
 }
 
 // Rule defines a single, named modification operation to be conditionally applied to HCL resources.
