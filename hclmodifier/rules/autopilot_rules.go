@@ -65,9 +65,11 @@ var AutopilotRules = []types.Rule{
 			{Type: types.RemoveBlock, Path: []string{"addons_config", "dns_cache_config"}},
 			{Type: types.RemoveBlock, Path: []string{"addons_config", "stateful_ha_config"}},
 
-			// Remove attributes and sub-blocks from cluster_autoscaling
-			{Type: types.RemoveAttribute, Path: []string{"cluster_autoscaling", "enabled"}},
-			{Type: types.RemoveAllNestedBlocksMatchingPath, Path: []string{"cluster_autoscaling", "resource_limits"}},
+			// Remove cluster_autoscaling block
+			{Type: types.RemoveBlock, Path: []string{"cluster_autoscaling"}},
+
+			// Remove node_config block
+			{Type: types.RemoveBlock, Path: []string{"node_config"}},
 
 			// Remove attributes from binary_authorization
 			{Type: types.RemoveAttribute, Path: []string{"binary_authorization", "enabled"}},
