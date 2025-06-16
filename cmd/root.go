@@ -63,6 +63,8 @@ or older templates. The tool modifies the file in-place.`,
 			rules.RuleTerraformLabel,
 		}
 		allRules = append(allRules, rules.AutopilotRules...)
+		allRules = append(allRules, rules.TopLevelComputedAttributesRules...)
+		allRules = append(allRules, rules.OtherComputedAttributesRules...)
 
 		var encounteredErrors []error
 

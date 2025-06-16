@@ -4,13 +4,11 @@
 # __generated__ by Terraform
 resource "google_container_cluster" "rag-cluster" {
   allow_net_admin                          = null
-  cluster_ipv4_cidr                        = "10.52.0.0/14"
   datapath_provider                        = "ADVANCED_DATAPATH"
   default_max_pods_per_node                = 110
   deletion_protection                      = true
   description                              = null
   disable_l4_lb_firewall_reconciliation    = false
-  enable_autopilot                         = false
   enable_cilium_clusterwide_network_policy = false
   enable_fqdn_network_policy               = false
   enable_intranode_visibility              = false
@@ -23,9 +21,7 @@ resource "google_container_cluster" "rag-cluster" {
   in_transit_encryption_config             = null
   initial_node_count                       = 0
   location                                 = "us-central1"
-  logging_service                          = "logging.googleapis.com/kubernetes"
   min_master_version                       = null
-  monitoring_service                       = "monitoring.googleapis.com/kubernetes"
   name                                     = "rag-cluster"
   network                                  = "projects/steel-thread-clusters/global/networks/ml-network"
   networking_mode                          = "VPC_NATIVE"
@@ -102,9 +98,7 @@ resource "google_container_cluster" "rag-cluster" {
     desired_tier = null
   }
   ip_allocation_policy {
-    cluster_ipv4_cidr_block       = "10.52.0.0/14"
     cluster_secondary_range_name  = "gke-rag-cluster-pods-d4107b66"
-    services_ipv4_cidr_block      = "34.118.224.0/20"
     services_secondary_range_name = null
     stack_type                    = "IPV4"
     pod_cidr_overprovision_config {
@@ -196,27 +190,21 @@ resource "google_container_cluster" "rag-cluster" {
       enable_integrity_monitoring = true
       enable_secure_boot          = false
     }
-    windows_node_config {
-      osversion = null
-    }
     workload_metadata_config {
       mode = "GKE_METADATA"
     }
   }
   node_pool {
-    initial_node_count = 1
-    max_pods_per_node  = 110
-    name               = "cpu-pool"
-    name_prefix        = null
-    node_count         = 1
-    node_locations     = ["us-central1-a", "us-central1-b", "us-central1-c"]
-    version            = "1.30.12-gke.1151000"
+    max_pods_per_node = 110
+    name              = "cpu-pool"
+    name_prefix       = null
+    node_count        = 1
+    node_locations    = ["us-central1-a", "us-central1-b", "us-central1-c"]
+    version           = "1.30.12-gke.1151000"
     autoscaling {
-      location_policy      = "BALANCED"
-      max_node_count       = 3
-      min_node_count       = 1
-      total_max_node_count = 0
-      total_min_node_count = 0
+      location_policy = "BALANCED"
+      max_node_count  = 3
+      min_node_count  = 1
     }
     management {
       auto_repair  = true
@@ -283,9 +271,6 @@ resource "google_container_cluster" "rag-cluster" {
         enable_integrity_monitoring = true
         enable_secure_boot          = false
       }
-      windows_node_config {
-        osversion = null
-      }
       workload_metadata_config {
         mode = "GKE_METADATA"
       }
@@ -297,13 +282,12 @@ resource "google_container_cluster" "rag-cluster" {
     }
   }
   node_pool {
-    initial_node_count = 1
-    max_pods_per_node  = 110
-    name               = "gpu-pool-l4"
-    name_prefix        = null
-    node_count         = 1
-    node_locations     = ["us-central1-a", "us-central1-b", "us-central1-c"]
-    version            = "1.30.12-gke.1151000"
+    max_pods_per_node = 110
+    name              = "gpu-pool-l4"
+    name_prefix       = null
+    node_count        = 1
+    node_locations    = ["us-central1-a", "us-central1-b", "us-central1-c"]
+    version           = "1.30.12-gke.1151000"
     autoscaling {
       location_policy      = "BALANCED"
       max_node_count       = 3
@@ -385,9 +369,6 @@ resource "google_container_cluster" "rag-cluster" {
         enable_integrity_monitoring = true
         enable_secure_boot          = false
       }
-      windows_node_config {
-        osversion = null
-      }
       workload_metadata_config {
         mode = "GKE_METADATA"
       }
@@ -409,9 +390,6 @@ resource "google_container_cluster" "rag-cluster" {
       enabled = false
       topic   = null
     }
-  }
-  pod_autoscaling {
-    hpa_profile = "HPA_PROFILE_UNSPECIFIED"
   }
   private_cluster_config {
     enable_private_endpoint     = false
