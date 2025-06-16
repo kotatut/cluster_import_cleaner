@@ -60,6 +60,7 @@ or older templates. The tool modifies the file in-place.`,
 			rules.OsVersionNodePoolRuleDefinition,
 			rules.InitialNodeCountRuleDefinition,
 			rules.RuleHandleAutopilotFalse,
+			rules.RuleTerraformLabel,
 		}
 		allRules = append(allRules, rules.AutopilotRules...)
 

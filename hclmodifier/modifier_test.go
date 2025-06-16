@@ -2608,17 +2608,19 @@ func findNodePoolInBlock(resourceBlock *hclwrite.Block, nodePoolName string, mod
 	return nil, fmt.Errorf("node_pool with name '%s' not found in the resource", nodePoolName)
 }
 
+type testCase struct {
+	name                  string
+	hclContent            string
+	expectedHCLContent    string
+	expectedModifications int
+	ruleToApply           types.Rule
+}
+
 func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 	t.Helper()
 	logger := zap.NewNop()
 
-	tests := []struct {
-		name                  string
-		hclContent            string
-		expectedHCLContent    string
-		expectedModifications int
-		ruleToApply           types.Rule
-	}{
+	tests := []testCase{
 		{
 			name: "logging_service should be removed when telemetry is ENABLED",
 			hclContent: `resource "google_container_cluster" "primary" {
@@ -2717,46 +2719,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			tmpFile, err := os.CreateTemp(tempDir, "test_logging_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
-			defer os.Remove(tmpFile.Name())
-
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
-				t.Fatalf("Failed to write to temp file: %v", err)
-			}
-			if err := tmpFile.Close(); err != nil {
-				t.Fatalf("Failed to close temp file: %v", err)
-			}
-
-			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			if err != nil {
-				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
-			}
-
-			modifications, errs := modifier.ApplyRules([]types.Rule{tc.ruleToApply})
-			if len(errs) > 0 {
-				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s", errs, tc.hclContent)
-			}
-
-			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
-			}
-
-			// Normalize and compare HCL content
-			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
-			if diags.HasErrors() {
-				t.Fatalf("Failed to parse expected HCL content: %v\nExpected HCL:\n%s", diags, tc.expectedHCLContent)
-			}
-			expectedNormalized := string(expectedF.Bytes())
-			actualNormalized := string(modifier.File().Bytes())
-
-			if actualNormalized != expectedNormalized {
-				t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
-			}
+			applyRuleTestCase(tc, t, logger)
 		})
 	}
 }
@@ -2765,13 +2728,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 	t.Helper()
 	logger := zap.NewNop()
 
-	tests := []struct {
-		name                  string
-		hclContent            string
-		expectedHCLContent    string
-		expectedModifications int
-		ruleToApply           types.Rule
-	}{
+	tests := []testCase{
 		{
 			name: "monitoring_service should be removed when monitoring_config block exists",
 			hclContent: `resource "google_container_cluster" "primary" {
@@ -2849,46 +2806,50 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			tmpFile, err := os.CreateTemp(tempDir, "test_monitoring_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
-			defer os.Remove(tmpFile.Name())
-
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
-				t.Fatalf("Failed to write to temp file: %v", err)
-			}
-			if err := tmpFile.Close(); err != nil {
-				t.Fatalf("Failed to close temp file: %v", err)
-			}
-
-			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			if err != nil {
-				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
-			}
-
-			modifications, errs := modifier.ApplyRules([]types.Rule{tc.ruleToApply})
-			if len(errs) > 0 {
-				t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s", errs, tc.hclContent)
-			}
-
-			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
-			}
-
-			// Normalize and compare HCL content
-			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
-			if diags.HasErrors() {
-				t.Fatalf("Failed to parse expected HCL content: %v\nExpected HCL:\n%s", diags, tc.expectedHCLContent)
-			}
-			expectedNormalized := string(expectedF.Bytes())
-			actualNormalized := string(modifier.File().Bytes())
-
-			if actualNormalized != expectedNormalized {
-				t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
-			}
+			applyRuleTestCase(tc, t, logger)
 		})
+	}
+}
+
+func applyRuleTestCase(tc testCase, t *testing.T, logger *zap.Logger) {
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_monitoring_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+	}
+
+	modifications, errs := modifier.ApplyRules([]types.Rule{tc.ruleToApply})
+	if len(errs) > 0 {
+		t.Fatalf("ApplyRules() returned errors = %v for HCL: \n%s", errs, tc.hclContent)
+	}
+
+	if modifications != tc.expectedModifications {
+		t.Errorf("ApplyRules() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
+			modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+	}
+
+	// Normalize and compare HCL content
+	expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
+	if diags.HasErrors() {
+		t.Fatalf("Failed to parse expected HCL content: %v\nExpected HCL:\n%s", diags, tc.expectedHCLContent)
+	}
+	expectedNormalized := string(expectedF.Bytes())
+	actualNormalized := string(modifier.File().Bytes())
+
+	if actualNormalized != expectedNormalized {
+		t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
 	}
 }
