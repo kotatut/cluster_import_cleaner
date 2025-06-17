@@ -9,8 +9,8 @@ import (
 //
 // Why it's necessary for GKE imports: `min_master_version` is automatically selected if not set implicitly
 // but it has to match `node_version` according to documentation.
-var SetMinVersionRuleDefinition = types.Rule{
-	Name:               "Set Min Master Version Rule: set it to node_version if it presents",
+var SetMinVersionRule = types.Rule{
+	Name:               "Set Min Master Version Rule: set it to node_version if min_master_version is absent",
 	TargetResourceType: "google_container_cluster",
 	Conditions: []types.RuleCondition{
 		{
@@ -18,7 +18,7 @@ var SetMinVersionRuleDefinition = types.Rule{
 			Path: []string{"node_version"},
 		},
 		{
-			Type: types.AttributeDoesntExists,
+			Type: types.AttributeDoesntExist, // Ensure this type matches the one defined in types/types.go
 			Path: []string{"min_master_version"},
 		},
 	},

@@ -22,18 +22,40 @@ var OtherComputedAttributesRules = []types.Rule{
 	createRemoveAttributeRule("google_container_cluster", []string{"label_fingerprint"}),
 	createRemoveAttributeRule("google_container_cluster", []string{"self_link"}),
 	createRemoveAttributeRule("google_container_cluster", []string{"master_auth", "cluster_ca_certificate"}),
-	createRemoveAttributeRule("google_container_cluster", []string{"node_pool", "instance_group_urls"}),
-	createRemoveAttributeRule("google_container_cluster", []string{"node_pool", "managed_instance_group_urls"}),
-	createRemoveAttributeRule("google_container_cluster", []string{"node_pool", "autoscaling", "total_max_node_count"}),
-	createRemoveAttributeRule("google_container_cluster", []string{"node_pool", "autoscaling", "total_min_node_count"}),
+	createRemoveAttributeInAllBlocksRule("google_container_cluster", "node_pool", []string{"instance_group_urls"}),
+	createRemoveAttributeInAllBlocksRule("google_container_cluster", "node_pool", []string{"managed_instance_group_urls"}),
+	createRemoveAttributeInAllBlocksRule("google_container_cluster", "node_pool", []string{"autoscaling", "total_max_node_count"}), // Will be handled by dedicated rule
+	createRemoveAttributeInAllBlocksRule("google_container_cluster", "node_pool", []string{"autoscaling", "total_min_node_count"}), // Will be handled by dedicated rule
 	createRemoveAttributeRule("google_container_cluster", []string{"private_cluster_config", "private_endpoint"}),
 	createRemoveAttributeRule("google_container_cluster", []string{"private_cluster_config", "public_endpoint"}),
+	createRemoveAttributeRule("google_container_cluster", []string{"control_plane_endpoints_config", "dns_endpoint_config", "endpoint"}),
 }
 
 func createRemoveAttributeRule(resourceType string, path []string) types.Rule {
 	return types.Rule{
 		Name:               fmt.Sprintf("Remove attribute '%s' from '%s'", path, resourceType),
 		TargetResourceType: resourceType,
+		Conditions: []types.RuleCondition{
+			{
+				Type: types.AttributeExists,
+				Path: path,
+			},
+		},
+		Actions: []types.RuleAction{
+			{
+				Type: types.RemoveAttribute,
+				Path: path,
+			},
+		},
+	}
+}
+
+func createRemoveAttributeInAllBlocksRule(resourceType string, blockType string, path []string) types.Rule {
+	return types.Rule{
+		Name:                  fmt.Sprintf("Remove attribute '%s' from '%s'", path, resourceType),
+		TargetResourceType:    resourceType,
+		NestedBlockTargetType: blockType,
+		ExecutionType:         types.RuleExecutionForEachNestedBlock,
 		Conditions: []types.RuleCondition{
 			{
 				Type: types.AttributeExists,

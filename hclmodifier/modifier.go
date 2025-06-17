@@ -507,11 +507,11 @@ func (m *Modifier) checkCondition(initialBlockBody *hclwrite.Body, condition typ
 			condLogger.Debug("Condition AttributeExists not met (attribute not found or error accessing).", zap.Error(err))
 			return false
 		}
-	case types.AttributeDoesntExists:
+	case types.AttributeDoesntExist:
 		// Checks if an attribute at condition.Path does NOT exist within initialBlockBody.
-		_, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
-		if err == nil {
-			condLogger.Debug("Condition AttributeDoesntExists not met (attribute was found).")
+		val, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
+		if err == nil && !val.IsNull() {
+			condLogger.Debug("Condition AttributeDoesntExist not met (attribute was found or null).")
 			return false
 		}
 	case types.BlockExists:
@@ -519,13 +519,6 @@ func (m *Modifier) checkCondition(initialBlockBody *hclwrite.Body, condition typ
 		_, err := m.GetNestedBlock(initialBlockBody, condition.Path)
 		if err != nil {
 			condLogger.Debug("Condition BlockExists not met (block not found or error accessing).", zap.Error(err))
-			return false
-		}
-	case types.NullValue:
-		// Checks if an attribute at condition.Path exists and its value is cty.Null.
-		val, _, err := m.GetAttributeValueByPath(initialBlockBody, condition.Path)
-		if err != nil || !val.IsNull() { // Error getting value, or value is not null.
-			condLogger.Debug("Condition NullValue not met.", zap.Error(err), zap.Bool("isNull", val.IsNull()))
 			return false
 		}
 	case types.AttributeValueEquals:
