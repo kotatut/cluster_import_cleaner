@@ -7,6 +7,13 @@ import (
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/stretchr/testify/assert"
+	"github.com/zclconf/go-cty/cty"
+	"go.uber.org/zap"
+
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
+	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
 )
 
 // HCL Test Snippet Constants and Helpers
@@ -82,7 +89,6 @@ func getAddonsConfigWithHttpLoadBalancing(disabled bool) string {
 // content should be pre-formatted with correct indentation and newlines.
 func getNestedBlock(blockName, content string) string {
 	// Ensure content starts with a newline if it's not empty, for proper formatting.
-	if content != "" && !strings.HasPrefix(content, "\n") && !strings.HasPrefix(content, " ") {
 	if content != "" && !strings.HasPrefix(content, "\n") && !strings.HasPrefix(content, " ") {
 		content = "\n    " + strings.TrimSpace(content) // Add indentation if missing
 	}
@@ -315,7 +321,7 @@ func findSpecificNodePool(t *testing.T, modifier *Modifier, resourceLabels []str
 		return nil
 	}
 	if resourceBlock == nil {
-		 t.Fatalf("Resource block %v not found for node pool checks", resourceLabels)
+		t.Fatalf("Resource block %v not found for node pool checks", resourceLabels)
 		return nil
 	}
 
@@ -376,23 +382,6 @@ func assertNodePoolAttributeValue(t *testing.T, modifier *Modifier, resourceLabe
 		}
 	}
 }
-
-
-import (
-	"fmt"
-	"os"
-	"strings"
-	"testing"
-
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/stretchr/testify/assert"
-	"github.com/zclconf/go-cty/cty"
-	"go.uber.org/zap"
-
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/rules"
-	"github.com/kotatut/cluster_import_cleaner/hclmodifier/types"
-)
 
 func TestEnhancedAttributeValueEquals(t *testing.T) {
 	logger := zap.NewNop()
@@ -569,9 +558,9 @@ func TestApplySetMinVersionRule(t *testing.T) {
 			expectedModifications: 0,
 		},
 		{
-			name: "Rule Does Not Apply - Neither node_version nor min_master_version present",
-			hclContent: getBasicGKECluster("test_cluster", "my-gke-cluster", "", ""),
-			expectedHCLContent: getBasicGKECluster("test_cluster", "my-gke-cluster", "", ""),
+			name:                  "Rule Does Not Apply - Neither node_version nor min_master_version present",
+			hclContent:            getBasicGKECluster("test_cluster", "my-gke-cluster", "", ""),
+			expectedHCLContent:    getBasicGKECluster("test_cluster", "my-gke-cluster", "", ""),
 			expectedModifications: 0,
 		},
 		{
@@ -669,7 +658,7 @@ func TestRuleSetAttributeValue(t *testing.T) {
 			)),
 		},
 		{
-			name: "Set new attribute",
+			name:       "Set new attribute",
 			hclContent: getBasicGKECluster("test", "test-cluster", "", ""),
 			rule: types.Rule{
 				Name:               "TestSetNewAttribute",
@@ -795,11 +784,11 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 				getNodePoolBlock("pool-one", `
     initial_node_count = 3
     node_count         = 5
-`) + getNodePoolBlock("pool-two", `
+`)+getNodePoolBlock("pool-two", `
     initial_node_count = 2
-`) + getNodePoolBlock("pool-three", `
+`)+getNodePoolBlock("pool-three", `
     node_count = 4
-`) + getNodePoolBlock("pool-four", "")),
+`)+getNodePoolBlock("pool-four", "")),
 			expectedModifications: 2,
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks: []nodePoolCheck{
@@ -828,8 +817,8 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 			},
 		},
 		{
-			name: "NoNodePools",
-			hclInput: getBasicGKECluster("gke_cluster", "test-cluster", ``, ""),
+			name:                  "NoNodePools",
+			hclInput:              getBasicGKECluster("gke_cluster", "test-cluster", ``, ""),
 			expectedModifications: 0,
 			gkeResourceName:       "gke_cluster",
 			nodePoolChecks:        nil,
@@ -851,7 +840,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 		},
 		{
 			name:                  "EmptyHCL",
-			hclInput:            ``,
+			hclInput:              ``,
 			expectedModifications: 0,
 			gkeResourceName:       "",
 			nodePoolChecks:        nil,
@@ -865,7 +854,7 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 `)) + "\n" + getBasicGKECluster("gke_two", "cluster-two", "",
 				getNodePoolBlock("gke-two-pool", `
     initial_node_count = 2
-`) + getNodePoolBlock("gke-two-pool-extra", `
+`)+getNodePoolBlock("gke-two-pool-extra", `
     node_count = 1
 `)),
 			expectedModifications: 2,
@@ -891,7 +880,6 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 				t.Fatalf("createModifierFromHCL returned nil for non-empty HCL input")
 			}
 
-
 			modifications, ruleErr := modifier.ApplyRules([]types.Rule{rules.InitialNodeCountRuleDefinition})
 			assert.Empty(t, ruleErr, "ApplyRules returned errors")
 			assert.Equal(t, tc.expectedModifications, modifications)
@@ -916,7 +904,6 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 				}
 			}
 
-
 			var targetGKEResource *hclwrite.Block
 			if tc.gkeResourceName != "" {
 				var errBlock error
@@ -925,15 +912,12 @@ func TestApplyInitialNodeCountRule(t *testing.T) {
 					t.Fatalf("Expected 'google_container_cluster' resource '%s' not found for verification. Modified HCL:\n%s. Error: %v", tc.gkeResourceName, string(modifiedContentBytes), errBlock)
 				}
 				if targetGKEResource == nil && len(tc.nodePoolChecks) > 0 {
-                     t.Fatalf("Expected 'google_container_cluster' resource '%s' not found (nil block) for verification. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
-                }
+					t.Fatalf("Expected 'google_container_cluster' resource '%s' not found (nil block) for verification. Modified HCL:\n%s", tc.gkeResourceName, string(modifiedContentBytes))
+				}
 			}
-
 
 			if targetGKEResource != nil && tc.nodePoolChecks != nil {
 				for _, npCheck := range tc.nodePoolChecks {
-					nodePoolBlock := findSpecificNodePool(t, modifier, resourceLabels, npCheck.nodePoolName)
-
 					if npCheck.expectInitialNodeCountRemoved {
 						assertNodePoolAttributeAbsent(t, modifier, resourceLabels, npCheck.nodePoolName, "initial_node_count")
 					} else {
@@ -1088,8 +1072,8 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 			},
 		},
 		{
-			name: "NeitherPresent_NoPrivateConfigBlock",
-			hclInput: getBasicGKECluster("gke_cluster", "test-cluster", "", ""),
+			name:                    "NeitherPresent_NoPrivateConfigBlock",
+			hclInput:                getBasicGKECluster("gke_cluster", "test-cluster", "", ""),
 			expectedModifications:   0,
 			gkeResourceName:         "gke_cluster",
 			expectMasterCIDRPresent: false,
@@ -1113,7 +1097,7 @@ func TestApplyMasterCIDRRule(t *testing.T) {
 		},
 		{
 			name:                  "EmptyHCL",
-			hclInput:            ``,
+			hclInput:              ``,
 			expectedModifications: 0,
 			gkeResourceName:       "",
 			expectNoGKEResource:   true,
@@ -1295,8 +1279,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
-			name: "binary_authorization block present but empty",
-			hclInput: getBasicGKECluster("primary", "primary-cluster", "", getBinaryAuthorizationBlock("")),
+			name:                                  "binary_authorization block present but empty",
+			hclInput:                              getBasicGKECluster("primary", "primary-cluster", "", getBinaryAuthorizationBlock("")),
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1345,7 +1329,7 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 		},
 		{
 			name:                                  "Empty HCL content",
-			hclInput:                            ``,
+			hclInput:                              ``,
 			expectedModifications:                 0,
 			resourceLabelsToVerify:                nil,
 			expectEnabledAttributeRemoved:         false,
@@ -1389,22 +1373,22 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 				if tc.binaryAuthorizationShouldHaveEvalMode {
 					assertAttributeExists(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
 				} else {
-                      originalFile, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
-                      originalResource, _ := findBlockInParsedFile(originalFile, tc.resourceLabelsToVerify[0], tc.resourceLabelsToVerify[1])
-                      var originalHadEvalModeWithEnabled bool
-                      if originalResource != nil {
-                          originalBA := originalResource.Body().FirstMatchingBlock("binary_authorization", nil)
-                          if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil && originalBA.Body().GetAttribute("enabled") != nil {
-                              originalHadEvalModeWithEnabled = true
-                          }
-                           if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil && originalBA.Body().GetAttribute("enabled") == nil {
-                              assertAttributeExists(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
-                          } else if !originalHadEvalModeWithEnabled && originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil {
-							  assertAttributeExists(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
-						  } else if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") == nil {
-							  assertAttributeAbsent(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
-						  }
-                      }
+					originalFile, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+					originalResource, _ := findBlockInParsedFile(originalFile, tc.resourceLabelsToVerify[0], tc.resourceLabelsToVerify[1])
+					var originalHadEvalModeWithEnabled bool
+					if originalResource != nil {
+						originalBA := originalResource.Body().FirstMatchingBlock("binary_authorization", nil)
+						if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil && originalBA.Body().GetAttribute("enabled") != nil {
+							originalHadEvalModeWithEnabled = true
+						}
+						if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil && originalBA.Body().GetAttribute("enabled") == nil {
+							assertAttributeExists(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
+						} else if !originalHadEvalModeWithEnabled && originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") != nil {
+							assertAttributeExists(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
+						} else if originalBA != nil && originalBA.Body().GetAttribute("evaluation_mode") == nil {
+							assertAttributeAbsent(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization", "evaluation_mode"})
+						}
+					}
 				}
 			} else {
 				assertNestedBlockAbsent(t, modifier, tc.resourceLabelsToVerify, []string{"binary_authorization"})
@@ -1476,16 +1460,16 @@ func TestApplyServicesIPV4CIDRRule(t *testing.T) {
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "ip_allocation_policy block is present but empty",
-			hclInput: getBasicGKECluster("primary", "primary-cluster", "", getIpAllocationPolicyBlock("")),
+			name:                                  "ip_allocation_policy block is present but empty",
+			hclInput:                              getBasicGKECluster("primary", "primary-cluster", "", getIpAllocationPolicyBlock("")),
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "ip_allocation_policy block is missing entirely",
-			hclInput: getBasicGKECluster("primary", "primary-cluster", "", ""),
+			name:                                  "ip_allocation_policy block is missing entirely",
+			hclInput:                              getBasicGKECluster("primary", "primary-cluster", "", ""),
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1531,7 +1515,7 @@ func TestApplyServicesIPV4CIDRRule(t *testing.T) {
 		},
 		{
 			name:                                  "Empty HCL content",
-			hclInput:                            ``,
+			hclInput:                              ``,
 			expectedModifications:                 0,
 			resourceLabelsToVerify:                nil,
 			expectServicesIPV4CIDRBlockRemoved:    false,
@@ -1703,7 +1687,7 @@ func TestApplyClusterIPV4CIDRRule(t *testing.T) {
 		},
 		{
 			name:                         "Empty HCL content",
-			hclInput:                   ``,
+			hclInput:                     ``,
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       nil,
@@ -1813,28 +1797,28 @@ func TestApplyAutopilotRule(t *testing.T) {
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
     ]
-`) + "\n" +
+`)+"\n"+
 					getAddonsConfigBlock(
-						getNetworkPolicyConfigBlock(`disabled = false`) + "\n" +
-							getDnsCacheConfigBlock(`enabled = true`) + "\n" +
-							getStatefulHAConfigBlock(`enabled = true`) + "\n" +
+						getNetworkPolicyConfigBlock(`disabled = false`)+"\n"+
+							getDnsCacheConfigBlock(`enabled = true`)+"\n"+
+							getStatefulHAConfigBlock(`enabled = true`)+"\n"+
 							getNestedBlock("http_load_balancing", `disabled = false`),
-					) + "\n" +
+					)+"\n"+
 					getNetworkPolicyFrameworkBlock(`
     provider = "CALICO"
     enabled  = true
-`) + "\n" +
-					getNodePoolBlock("default-pool", `initial_node_count = 1`) + "\n" +
-					getNodePoolBlock("custom-pool", `initial_node_count = 1`) + "\n" +
+`)+"\n"+
+					getNodePoolBlock("default-pool", `initial_node_count = 1`)+"\n"+
+					getNodePoolBlock("custom-pool", `initial_node_count = 1`)+"\n"+
 					getClusterAutoscalingBlock(strings.TrimSpace(`
     enabled = true
     autoscaling_profile = "OPTIMIZE_UTILIZATION"
-`) + "\n" +
+`)+"\n"+
 						getResourceLimitsBlock(`
       resource_type = "cpu"
       minimum = 1
       maximum = 10
-`)) + "\n" +
+`))+"\n"+
 					getBinaryAuthorizationBlock(`
     evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
     enabled = true
@@ -1867,20 +1851,20 @@ func TestApplyAutopilotRule(t *testing.T) {
   cluster_ipv4_cidr     = "10.0.0.0/8"
   enable_shielded_nodes = true
 `,
-				getNodePoolBlock("default-pool", "") + "\n" +
+				getNodePoolBlock("default-pool", "")+"\n"+
 					getClusterAutoscalingBlock(`
     enabled = true
     autoscaling_profile = "BALANCED"
-`) + "\n" +
+`)+"\n"+
 					getAddonsConfigBlock(
-						getDnsCacheConfigBlock(`enabled = true`) + "\n" +
+						getDnsCacheConfigBlock(`enabled = true`)+"\n"+
 							getNestedBlock("http_load_balancing", `disabled = false`),
 					),
 			),
-			expectedModifications:     1,
-			clusterName:               "standard_cluster",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsKept:     []string{"cluster_ipv4_cidr", "enable_shielded_nodes"},
+			expectedModifications:            1,
+			clusterName:                      "standard_cluster",
+			expectEnableAutopilotAttr:        nil,
+			expectedRootAttrsKept:            []string{"cluster_ipv4_cidr", "enable_shielded_nodes"},
 			expectedTopLevelNestedBlocksKept: []string{"node_pool", "cluster_autoscaling", "addons_config"},
 			addonsConfigCheck: &autopilotAddonsConfigCheck{
 				expectBlockExists:                true,
@@ -1900,15 +1884,15 @@ func TestApplyAutopilotRule(t *testing.T) {
   cluster_ipv4_cidr     = "10.0.0.0/8"
   enable_shielded_nodes = true
 `,
-				getNodePoolBlock("default-pool", "") + "\n" +
+				getNodePoolBlock("default-pool", "")+"\n"+
 					getAddonsConfigBlock(
 						getNetworkPolicyConfigBlock(`disabled = false`),
 					),
 			),
-			expectedModifications:     0,
-			clusterName:               "existing_cluster",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsKept:     []string{"cluster_ipv4_cidr", "enable_shielded_nodes"},
+			expectedModifications:            0,
+			clusterName:                      "existing_cluster",
+			expectEnableAutopilotAttr:        nil,
+			expectedRootAttrsKept:            []string{"cluster_ipv4_cidr", "enable_shielded_nodes"},
 			expectedTopLevelNestedBlocksKept: []string{"node_pool", "addons_config"},
 			addonsConfigCheck: &autopilotAddonsConfigCheck{
 				expectBlockExists:                true,
@@ -1923,8 +1907,8 @@ func TestApplyAutopilotRule(t *testing.T) {
 `,
 				getAddonsConfigBlock(
 					getNestedBlock("http_load_balancing", `disabled = true`),
-				) + "\n" +
-					getClusterAutoscalingBlock(`autoscaling_profile = "BALANCED"`) + "\n" +
+				)+"\n"+
+					getClusterAutoscalingBlock(`autoscaling_profile = "BALANCED"`)+"\n"+
 					getBinaryAuthorizationBlock(`evaluation_mode = "DISABLED"`),
 			),
 			expectedModifications:               1,
@@ -1974,10 +1958,10 @@ func TestApplyAutopilotRule(t *testing.T) {
   enable_autopilot = "not_a_boolean"
   cluster_ipv4_cidr = "10.1.0.0/16"
 `, getNodePoolBlock("default", "")),
-			expectedModifications:     0,
-			clusterName:               "non_bool_autopilot",
-			expectEnableAutopilotAttr: nil,
-			expectedRootAttrsKept:     []string{"enable_autopilot", "cluster_ipv4_cidr"},
+			expectedModifications:            0,
+			clusterName:                      "non_bool_autopilot",
+			expectEnableAutopilotAttr:        nil,
+			expectedRootAttrsKept:            []string{"enable_autopilot", "cluster_ipv4_cidr"},
 			expectedTopLevelNestedBlocksKept: []string{"node_pool"},
 		},
 	}
@@ -2050,16 +2034,18 @@ func TestApplyAutopilotRule(t *testing.T) {
 					if tc.addonsConfigCheck.expectNetworkPolicyConfigRemoved {
 						assertNestedBlockAbsent(t, modifier, resourceLabels, append(path, "network_policy_config"))
 					} else {
-						originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("addons_config",nil) != nil && originalBlock.Body().FirstMatchingBlock("addons_config",nil).Body().FirstMatchingBlock("network_policy_config",nil) != nil {
+						parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+						originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("addons_config", nil) != nil && originalBlock.Body().FirstMatchingBlock("addons_config", nil).Body().FirstMatchingBlock("network_policy_config", nil) != nil {
 							assertNestedBlockExists(t, modifier, resourceLabels, append(path, "network_policy_config"))
 						}
 					}
 					if tc.addonsConfigCheck.expectDnsCacheConfigRemoved {
 						assertNestedBlockAbsent(t, modifier, resourceLabels, append(path, "dns_cache_config"))
 					} else {
-						originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("addons_config",nil) != nil && originalBlock.Body().FirstMatchingBlock("addons_config",nil).Body().FirstMatchingBlock("dns_cache_config",nil) != nil {
+						parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+						originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("addons_config", nil) != nil && originalBlock.Body().FirstMatchingBlock("addons_config", nil).Body().FirstMatchingBlock("dns_cache_config", nil) != nil {
 							assertNestedBlockExists(t, modifier, resourceLabels, append(path, "dns_cache_config"))
 						}
 					}
@@ -2081,16 +2067,18 @@ func TestApplyAutopilotRule(t *testing.T) {
 					if tc.clusterAutoscalingCheck.expectEnabledRemoved {
 						assertAttributeAbsent(t, modifier, resourceLabels, append(path, "enabled"))
 					} else {
-						originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling",nil) != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling",nil).Body().GetAttribute("enabled") != nil {
+						parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+						originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil) != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil).Body().GetAttribute("enabled") != nil {
 							assertAttributeExists(t, modifier, resourceLabels, append(path, "enabled"))
 						}
 					}
 					if tc.clusterAutoscalingCheck.expectResourceLimitsRemoved {
 						assertNestedBlockAbsent(t, modifier, resourceLabels, append(path, "resource_limits"))
 					} else {
-						originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling",nil) != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling",nil).Body().FirstMatchingBlock("resource_limits",nil) != nil {
+						parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+						originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil) != nil && originalBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil).Body().FirstMatchingBlock("resource_limits", nil) != nil {
 							assertNestedBlockExists(t, modifier, resourceLabels, append(path, "resource_limits"))
 						}
 					}
@@ -2109,13 +2097,15 @@ func TestApplyAutopilotRule(t *testing.T) {
 					if tc.binaryAuthorizationCheck.expectEnabledRemoved {
 						assertAttributeAbsent(t, modifier, resourceLabels, append(path, "enabled"))
 					} else {
-						originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization",nil) != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization",nil).Body().GetAttribute("enabled") != nil {
+						parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+						originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+						if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization", nil) != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization", nil).Body().GetAttribute("enabled") != nil {
 							assertAttributeExists(t, modifier, resourceLabels, append(path, "enabled"))
 						}
 					}
-					originalBlock, _:= findBlockInParsedFile(hclwrite.MustParseConfig([]byte(tc.hclInput), "", hcl.InitialPos), resourceLabels[0], resourceLabels[1])
-					if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization",nil) != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization",nil).Body().GetAttribute("evaluation_mode") != nil {
+					parsed, _ := hclwrite.ParseConfig([]byte(tc.hclInput), "", hcl.InitialPos)
+					originalBlock, _ := findBlockInParsedFile(parsed, resourceLabels[0], resourceLabels[1])
+					if originalBlock != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization", nil) != nil && originalBlock.Body().FirstMatchingBlock("binary_authorization", nil).Body().GetAttribute("evaluation_mode") != nil {
 						assertAttributeExists(t, modifier, resourceLabels, append(path, "evaluation_mode"))
 					}
 				} else {
@@ -2204,7 +2194,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 			hclContent: getBasicGKECluster("primary", "my-cluster", `
   logging_service  = "logging.googleapis.com/kubernetes"
 `, getClusterTelemetryBlock("ENABLED")),
-			expectedHCLContent: getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
+			expectedHCLContent:    getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
 			expectedModifications: 1,
 			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
@@ -2231,9 +2221,9 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
-			name: "logging_service should NOT be removed if logging_service attribute is missing",
-			hclContent: getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
-			expectedHCLContent: getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
+			name:                  "logging_service should NOT be removed if logging_service attribute is missing",
+			hclContent:            getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
+			expectedHCLContent:    getBasicGKECluster("primary", "my-cluster", "", getClusterTelemetryBlock("ENABLED")),
 			expectedModifications: 0,
 			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
@@ -2275,7 +2265,7 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 			hclContent: getBasicGKECluster("primary", "my-cluster", `
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 `, getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
-			expectedHCLContent: getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
+			expectedHCLContent:    getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
 			expectedModifications: 1,
 			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
@@ -2291,9 +2281,9 @@ func TestModifier_ApplyRuleRemoveMonitoringService(t *testing.T) {
 			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
 		{
-			name: "monitoring_service should NOT be removed if monitoring_service attribute is missing",
-			hclContent: getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
-			expectedHCLContent: getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
+			name:                  "monitoring_service should NOT be removed if monitoring_service attribute is missing",
+			hclContent:            getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
+			expectedHCLContent:    getBasicGKECluster("primary", "my-cluster", "", getMonitoringConfigBlock(`enable_components = ["SYSTEM_COMPONENTS"]`)),
 			expectedModifications: 0,
 			ruleToApply:           rules.RuleRemoveMonitoringService,
 		},
