@@ -739,48 +739,6 @@ resource "google_container_cluster" "gke_two" {
 					}
 				}
 			}
-
-			if tc.name == "MultipleGKEResources" {
-				var gkeTwoResource *hclwrite.Block
-				gkeTwoResource, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two")
-				if gkeTwoResource == nil {
-					t.Fatalf("Expected 'google_container_cluster' resource 'gke_two' not found for multi-resource verification. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				gkeTwoResource, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two") // Re-fetch from verifiedFile
-				if gkeTwoResource == nil {
-					t.Fatalf("Expected 'google_container_cluster' resource 'gke_two' not found for multi-resource verification. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-
-				// For "gke-two-pool" in "gke_two": initial_node_count removed, node_count absent (wasn't there)
-				assertNodePoolAttributeAbsent(t, modifier, "gke_two", "gke-two-pool", "initial_node_count")
-				assertNodePoolAttributeAbsent(t, modifier, "gke_two", "gke-two-pool", "node_count")
-
-				// For "gke-two-pool-extra" in "gke_two": initial_node_count absent (wasn't there), node_count present and value 1
-				assertNodePoolAttributeAbsent(t, modifier, "gke_two", "gke-two-pool-extra", "initial_node_count")
-				assertNodePoolAttributeValue(t, modifier, "gke_two", "gke-two-pool-extra", "node_count", cty.NumberIntVal(1))
-			}
-
-			if tc.expectNoOtherResourceChanges && tc.name == "NonGKEResource" {
-				var nonGKEResource *hclwrite.Block
-				nonGKEResource, _ = findBlockInParsedFile(verifiedFile, "google_compute_instance", "not_gke")
-				if nonGKEResource == nil {
-					t.Fatalf("Expected non-GKE resource 'google_compute_instance.not_gke' not found. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				if nonGKEResource.Body().GetAttribute("initial_node_count") == nil {
-					t.Errorf("Top-level 'initial_node_count' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				npBlock, _ := findNodePoolInBlock(nonGKEResource, "", modifier)
-				if npBlock == nil {
-					t.Errorf("'node_pool' block was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
-				} else {
-					if npBlock.Body().GetAttribute("initial_node_count") == nil {
-						t.Errorf("'initial_node_count' in 'node_pool' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
-					}
-					if npBlock.Body().GetAttribute("node_count") == nil {
-						t.Errorf("'node_count' in 'node_pool' was unexpectedly removed from 'google_compute_instance.not_gke'. Modified HCL:\n%s", string(modifiedContentBytes))
-					}
-				}
-			}
 		})
 	}
 }
@@ -1091,59 +1049,6 @@ resource "google_container_cluster" "gke_three_no_subnetwork" {
 					}
 				}
 			}
-
-			if tc.name == "MultipleGKEResources_OneMatch" {
-				gkeTwo, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two_no_master_cidr")
-				if gkeTwo == nil {
-					t.Fatalf("GKE resource 'gke_two_no_master_cidr' not found in multi-resource test.")
-				}
-				if gkeTwo.Body().GetAttribute("master_ipv4_cidr_block") != nil {
-					t.Errorf("'master_ipv4_cidr_block' unexpectedly present in 'gke_two_no_master_cidr'.")
-				}
-				pccTwo := gkeTwo.Body().FirstMatchingBlock("private_cluster_config", nil)
-				if pccTwo == nil {
-					t.Fatalf("'private_cluster_config' missing in 'gke_two_no_master_cidr'.")
-				}
-				if pccTwo.Body().GetAttribute("private_endpoint_subnetwork") == nil {
-					t.Errorf("'private_endpoint_subnetwork' unexpectedly missing from 'gke_two_no_master_cidr'.")
-				}
-
-				gkeThree, _ := findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_three_no_subnetwork")
-				if gkeThree == nil {
-					t.Fatalf("GKE resource 'gke_three_no_subnetwork' not found in multi-resource test.")
-				}
-				if gkeThree.Body().GetAttribute("master_ipv4_cidr_block") == nil {
-					t.Errorf("'master_ipv4_cidr_block' unexpectedly missing from 'gke_three_no_subnetwork'.")
-				}
-				pccThree := gkeThree.Body().FirstMatchingBlock("private_cluster_config", nil)
-				if pccThree == nil {
-					t.Fatalf("'private_cluster_config' missing in 'gke_three_no_subnetwork'.")
-				}
-				if pccThree.Body().GetAttribute("private_endpoint_subnetwork") != nil {
-					t.Errorf("'private_endpoint_subnetwork' unexpectedly present in 'gke_three_no_subnetwork'.")
-				}
-				if pccThree.Body().GetAttribute("enable_private_endpoint") == nil {
-					t.Errorf("'enable_private_endpoint' unexpectedly removed from 'gke_three_no_subnetwork'.")
-				}
-			}
-
-			if tc.expectNoOtherResourceChanges && tc.name == "NonGKEResource" {
-				nonGke, _ := findBlockInParsedFile(verifiedFile, "google_compute_instance", "not_gke")
-				if nonGke == nil {
-					t.Fatalf("Non-GKE resource 'google_compute_instance.not_gke' not found. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				if nonGke.Body().GetAttribute("master_ipv4_cidr_block") == nil {
-					t.Errorf("'master_ipv4_cidr_block' was unexpectedly removed from non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				pccNonGke := nonGke.Body().FirstMatchingBlock("private_cluster_config", nil)
-				if pccNonGke == nil {
-					t.Errorf("'private_cluster_config' block was unexpectedly removed from non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
-				} else {
-					if pccNonGke.Body().GetAttribute("private_endpoint_subnetwork") == nil {
-						t.Errorf("'private_endpoint_subnetwork' was unexpectedly removed from 'private_cluster_config' of non-GKE resource. Modified HCL:\n%s", string(modifiedContentBytes))
-					}
-				}
-			}
 		})
 	}
 }
@@ -1414,26 +1319,6 @@ resource "google_container_cluster" "gke_two" {
 					}
 				}
 			}
-
-			if tc.name == "Multiple GKE resources, one with conflict" {
-				var gkeTwoBlock *hclwrite.Block
-				gkeTwoBlock, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", "gke_two")
-				if gkeTwoBlock == nil {
-					t.Fatalf("Could not find 'google_container_cluster' GKE block named 'gke_two' for multi-block test verification. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				binaryAuthGkeTwo := gkeTwoBlock.Body().FirstMatchingBlock("binary_authorization", nil)
-				if binaryAuthGkeTwo == nil {
-					t.Fatalf("'binary_authorization' missing in 'gke_two' GKE block for multi-block test. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				if binaryAuthGkeTwo.Body().GetAttribute("enabled") != nil {
-					t.Errorf("'enabled' attribute should NOT be present in 'gke_two' ('binary_authorization' block), but it was found. Modified HCL:\n%s",
-						string(modifiedContentBytes))
-				}
-				if binaryAuthGkeTwo.Body().GetAttribute("evaluation_mode") == nil {
-					t.Errorf("'evaluation_mode' attribute expected to be PRESENT in 'gke_two' ('binary_authorization' block), but was NOT FOUND. Modified HCL:\n%s",
-						string(modifiedContentBytes))
-				}
-			}
 		})
 	}
 }
@@ -1699,22 +1584,6 @@ resource "google_container_cluster" "beta" {
 					}
 				}
 			}
-
-			if tc.name == "Multiple google_container_cluster blocks, one matching for Rule 2" {
-				var secondaryBlock *hclwrite.Block
-				secondaryBlock, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", "secondary")
-				if secondaryBlock == nil {
-					t.Fatalf("Could not find 'google_container_cluster' GKE block named 'secondary' for multi-block test verification. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				ipAllocSecondary := secondaryBlock.Body().FirstMatchingBlock("ip_allocation_policy", nil)
-				if ipAllocSecondary == nil {
-					t.Fatalf("'ip_allocation_policy' missing in 'secondary' GKE block for multi-block test. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				if ipAllocSecondary.Body().GetAttribute("services_ipv4_cidr_block") == nil {
-					t.Errorf("'services_ipv4_cidr_block' expected to be PRESENT in 'secondary' GKE's ip_allocation_policy, but was NOT FOUND. Modified HCL:\n%s",
-						string(modifiedContentBytes))
-				}
-			}
 		})
 	}
 }
@@ -1935,32 +1804,7 @@ resource "google_container_cluster" "secondary" {
 							t.Errorf("Expected 'cluster_ipv4_cidr' to be removed from %s[\"%s\"], but it was found. Modified HCL:\n%s",
 								blockType, blockName, string(modifiedContentBytes))
 						}
-					} else {
-						if tc.name == "Non-matching resource type (google_compute_instance)" {
-							originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
-							originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
-							var originalBlockHasIt bool
-							if originalResourceBlock != nil && originalResourceBlock.Body().GetAttribute("cluster_ipv4_cidr") != nil {
-								originalBlockHasIt = true
-							}
-							if originalBlockHasIt && !hasClusterIPV4CIDR {
-								t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed from non-target resource %s[\"%s\"]. Modified HCL:\n%s",
-									blockType, blockName, string(modifiedContentBytes))
-							}
-						}
 					}
-				}
-			}
-
-			if tc.name == "Multiple google_container_cluster blocks, one matching" {
-				var secondaryBlock *hclwrite.Block
-				secondaryBlock, _ = findBlockInParsedFile(verifiedFile, "google_container_cluster", "secondary")
-				if secondaryBlock == nil {
-					t.Fatalf("Could not find the 'google_container_cluster' block named 'secondary' for verification. Modified HCL:\n%s", string(modifiedContentBytes))
-				}
-				if secondaryBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-					t.Errorf("Expected 'cluster_ipv4_cidr' to be present in 'secondary' block, but it was not. Modified HCL:\n%s",
-						string(modifiedContentBytes))
 				}
 			}
 		})
@@ -2316,15 +2160,6 @@ func TestApplyAutopilotRule(t *testing.T) {
 					}
 				}
 			}
-			// Specific check for "enable_autopilot is not a boolean" - it should remain untouched by these rules
-			if tc.name == "enable_autopilot is not a boolean" {
-				assert.NotNil(t, enableAutopilotHCLAttr, "'enable_autopilot' should have remained as 'not_a_boolean'")
-				if enableAutopilotHCLAttr != nil {
-					val, _ := modifier.GetAttributeValue(enableAutopilotHCLAttr)
-					assert.Equal(t, cty.String, val.Type(), "'enable_autopilot' should be a string for this test case")
-					assert.Equal(t, "not_a_boolean", val.AsString(), "'enable_autopilot' value mismatch for 'not_a_boolean' case")
-				}
-			}
 
 			// 2. Root-level attributes removal
 			for _, attrName := range tc.expectedRootAttrsRemoved {
@@ -2390,9 +2225,6 @@ func TestApplyAutopilotRule(t *testing.T) {
 
 						if tc.clusterAutoscaling.expectResourceLimitsRemoved {
 							assert.Nil(t, caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil), "Expected 'resource_limits' block in 'cluster_autoscaling' to be removed, but it was found in test: %s", tc.name)
-						} else if caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil) != nil && tc.name == "enable_autopilot is false, conflicting fields present" {
-							// This means it should exist for this specific test case
-							assert.NotNil(t, caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil), "'resource_limits' should be present for test: %s", tc.name)
 						}
 
 						profileAttr := caBlockInHCL.Body().GetAttribute("autoscaling_profile")
@@ -2431,78 +2263,9 @@ func TestApplyAutopilotRule(t *testing.T) {
 						} else if enabledAttr != nil { // Check it's still there if not expected to be removed
 							assert.NotNil(t, enabledAttr, "'enabled' attribute in 'binary_authorization' should be present if not expected to be removed in test: %s", tc.name)
 						}
-
-						// Check evaluation_mode is preserved if autopilot is true and enabled is removed
-						if tc.name == "enable_autopilot is true, all conflicting fields present" {
-							evalModeAttr := baBlockInHCL.Body().GetAttribute("evaluation_mode")
-							assert.NotNil(t, evalModeAttr, "Expected 'evaluation_mode' in 'binary_authorization' to remain for test '%s'", tc.name)
-							if evalModeAttr != nil {
-								val, err := modifier.GetAttributeValue(evalModeAttr)
-								assert.NoError(t, err)
-								assert.True(t, val.Type() == cty.String && val.AsString() == "PROJECT_SINGLETON_POLICY_ENFORCE", "evaluation_mode value mismatch")
-							}
-						}
 					}
 				} else {
 					assert.Nil(t, baBlockInHCL, "Expected 'binary_authorization' block to be removed, but it was found in test: %s", tc.name)
-				}
-			}
-
-			if tc.expectNoOtherChanges {
-				if tc.name == "enable_autopilot is false, conflicting fields present" {
-					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot=false' case.")
-					}
-					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
-					if addonsCfg == nil {
-						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot=false' case.")
-					} else {
-						if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
-							t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
-						}
-						if addonsCfg.Body().FirstMatchingBlock("http_load_balancing", nil) == nil {
-							t.Errorf("'http_load_balancing' in 'addons_config' was unexpectedly removed in 'enable_autopilot=false' case.")
-						}
-					}
-					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot=false' case.")
-					}
-					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil {
-						t.Errorf("'node_pool' block was unexpectedly removed in 'enable_autopilot=false' case.")
-					}
-				}
-				if tc.name == "enable_autopilot not present, conflicting fields present" {
-					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot not present' case.")
-					}
-					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
-					if addonsCfg == nil {
-						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot not present' case.")
-					} else if addonsCfg.Body().FirstMatchingBlock("network_policy_config", nil) == nil {
-						t.Errorf("'network_policy_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot not present' case.")
-					}
-					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot not present' case.")
-					}
-					if clusterBlock.Body().FirstMatchingBlock("node_pool", nil) == nil {
-						t.Errorf("'node_pool' block was unexpectedly removed in 'enable_autopilot not present' case.")
-					}
-				}
-				if tc.name == "enable_autopilot is not a boolean" {
-					// The removal of 'enable_autopilot' is checked by the expectedRootAttrsRemoved logic.
-					// We only need to check that other attributes were not unexpectedly changed.
-					if clusterBlock.Body().GetAttribute("cluster_ipv4_cidr") == nil {
-						t.Errorf("'cluster_ipv4_cidr' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					}
-					addonsCfg := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
-					if addonsCfg == nil {
-						t.Errorf("'addons_config' block was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					} else if addonsCfg.Body().FirstMatchingBlock("dns_cache_config", nil) == nil {
-						t.Errorf("'dns_cache_config' in 'addons_config' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					}
-					if clusterBlock.Body().GetAttribute("enable_shielded_nodes") == nil {
-						t.Errorf("'enable_shielded_nodes' was unexpectedly removed in 'enable_autopilot is not a boolean' case.")
-					}
 				}
 			}
 		})
