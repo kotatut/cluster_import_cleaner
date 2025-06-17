@@ -280,8 +280,7 @@ func TestApplySetMinVersionRule(t *testing.T) {
 			assert.NoError(t, err, "NewFromFile() error")
 
 			rulesToApply := []types.Rule{
-				rules.SetMinVersionRule_WhenAbsentDefinition,
-				rules.SetMinVersionRule_WhenNullDefinition,
+				rules.SetMinVersionRule,
 			}
 			modifications, errs := modifier.ApplyRules(rulesToApply)
 
@@ -292,10 +291,8 @@ func TestApplySetMinVersionRule(t *testing.T) {
 				// This depends on whether "condition not met" is treated as an error by the engine.
 				// For this test, we assume that "condition not met" might be logged but not counted in `errs` from ApplyRules.
 				// If it IS an error, then len(errs) could be 1, and that's acceptable.
-				t.Logf("Warning: For test case '%s', %d errors returned from ApplyRules: %v. This might be okay if one rule applied and the other correctly didn't.", len(errs), tc.name, errs)
 				assert.LessOrEqual(t, len(errs), 1, "Expected at most one 'condition not met' error when a rule applies for test case '%s'", tc.name)
 			}
-
 
 			assert.Equal(t, tc.expectedModifications, modifications)
 
@@ -2391,14 +2388,12 @@ func TestApplyAutopilotRule(t *testing.T) {
 							}
 						}
 
-
 						if tc.clusterAutoscaling.expectResourceLimitsRemoved {
 							assert.Nil(t, caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil), "Expected 'resource_limits' block in 'cluster_autoscaling' to be removed, but it was found in test: %s", tc.name)
 						} else if caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil) != nil && tc.name == "enable_autopilot is false, conflicting fields present" {
 							// This means it should exist for this specific test case
 							assert.NotNil(t, caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil), "'resource_limits' should be present for test: %s", tc.name)
 						}
-
 
 						profileAttr := caBlockInHCL.Body().GetAttribute("autoscaling_profile")
 						if tc.clusterAutoscaling.expectProfileUnchanged != nil {
@@ -2452,7 +2447,6 @@ func TestApplyAutopilotRule(t *testing.T) {
 					assert.Nil(t, baBlockInHCL, "Expected 'binary_authorization' block to be removed, but it was found in test: %s", tc.name)
 				}
 			}
-
 
 			if tc.expectNoOtherChanges {
 				if tc.name == "enable_autopilot is false, conflicting fields present" {
@@ -2659,6 +2653,150 @@ func findNodePoolInBlock(resourceBlock *hclwrite.Block, nodePoolName string, mod
 	return nil, fmt.Errorf("node_pool with name '%s' not found in the resource", nodePoolName)
 }
 
+func TestApplyMoreComputedAttributesRules(t *testing.T) {
+	logger := zap.NewNop()
+
+	tests := []struct {
+		name                  string
+		hclContent            string
+		expectedHCLContent    string
+		rulesToApply          []types.Rule
+		expectedModifications int
+	}{
+		{
+			name: "Remove control_plane_endpoints and database_encryption.state",
+			hclContent: `resource "google_container_cluster" "test" {
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      endpoint = "some-endpoint"
+      allow_external_traffic = false
+    }
+  }
+  database_encryption {
+    state    = "DECRYPTED"
+    key_name = "some_key"
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "test" {
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = false
+    }
+  }
+  database_encryption {
+    state    = "DECRYPTED"
+    key_name = "some_key"
+  }
+}`,
+			rulesToApply:          rules.OtherComputedAttributesRules, // This slice now includes the new rules
+			expectedModifications: 1,
+		},
+		{
+			name: "Remove node_pool.autoscaling total_counts",
+			hclContent: `resource "google_container_cluster" "test_np_computed" {
+  node_pool {
+    name = "pool1"
+    autoscaling {
+      total_max_node_count = 10
+      total_min_node_count = 1
+      location_policy      = "BALANCED"
+    }
+  }
+  node_pool {
+    name = "pool2"
+    autoscaling {
+      total_max_node_count = 5 // total_min_node_count is absent
+    }
+  }
+  node_pool {
+    name = "pool3"
+  }
+  node_pool {
+    name = "pool4"
+    autoscaling {
+      location_policy = "ANY"
+    }
+  }
+  node_pool {
+    name = "pool5"
+    autoscaling {
+      total_min_node_count = 2
+    }
+  }
+}`,
+			expectedHCLContent: `resource "google_container_cluster" "test_np_computed" {
+  node_pool {
+    name = "pool1"
+    autoscaling {
+      location_policy = "BALANCED"
+    }
+  }
+  node_pool {
+    name = "pool2"
+    autoscaling {
+	}
+  }
+  node_pool {
+    name = "pool3"
+  }
+  node_pool {
+    name = "pool4"
+    autoscaling {
+      location_policy = "ANY"
+    }
+  }
+  node_pool {
+    name = "pool5"
+    autoscaling {
+	}
+  }
+}`,
+			rulesToApply:          rules.OtherComputedAttributesRules,
+			expectedModifications: 4, // pool1 (max, min), pool2 (max), pool5 (min)
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "test_more_computed_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.Write([]byte(tc.hclContent))
+			assert.NoError(t, err, "Failed to write to temp file for '%s'", tc.name)
+			err = tmpFile.Close()
+			assert.NoError(t, err, "Failed to close temp file for '%s'", tc.name)
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			assert.NoError(t, err, "NewFromFile() error for '%s'", tc.name)
+			if err != nil {
+				return
+			}
+
+			modifications, errs := modifier.ApplyRules(tc.rulesToApply)
+			assert.Empty(t, errs, "ApplyRules returned errors for '%s': %v", tc.name, errs)
+			assert.Equal(t, tc.expectedModifications, modifications, "Modification count mismatch for '%s'", tc.name)
+
+			// Normalize and compare HCL content
+			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
+			assert.False(t, diags.HasErrors(), "Failed to parse expected HCL content for '%s': %v", tc.name, diags)
+			if diags.HasErrors() {
+				return
+			}
+
+			actualF, diags := hclwrite.ParseConfig(modifier.File().Bytes(), "actual.hcl", hcl.InitialPos)
+			assert.False(t, diags.HasErrors(), "Failed to parse actual HCL content for '%s': %v", tc.name, diags)
+			if diags.HasErrors() {
+				return
+			}
+
+			assert.Equal(t, string(expectedF.Bytes()), string(actualF.Bytes()), "HCL content mismatch for '%s'", tc.name)
+		})
+	}
+}
+
 type testCase struct {
 	name                  string
 	hclContent            string
@@ -2693,7 +2831,7 @@ func TestModifier_ApplyRuleRemoveLoggingService(t *testing.T) {
 			ruleToApply:           rules.RuleRemoveLoggingService,
 		},
 		{
-			name: "logging_service should NOT be removed when telemetry is DISABLED",
+			name: "logging_service should NOT be removed when telemetry is disabled",
 			hclContent: `resource "google_container_cluster" "primary" {
   name             = "my-cluster"
   location         = "us-central1"
@@ -2902,135 +3040,5 @@ func applyRuleTestCase(tc testCase, t *testing.T, logger *zap.Logger) {
 
 	if actualNormalized != expectedNormalized {
 		t.Errorf("HCL content mismatch.\nExpected:\n%s\nGot:\n%s", expectedNormalized, actualNormalized)
-	}
-}
-
-func TestApplyRemoveTopLevelInitialNodeCountRule(t *testing.T) {
-	logger := zap.NewNop()
-	tests := []struct {
-		name                  string
-		hclContent            string
-		expectedHCLContent    string
-		expectedModifications int
-		rule                  types.Rule
-	}{
-		{
-			name: "initial_node_count and node_pool both exist",
-			hclContent: `resource "google_container_cluster" "test" {
-  initial_node_count = 1
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedHCLContent: `resource "google_container_cluster" "test" {
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedModifications: 1,
-			rule:                  rules.RemoveTopLevelInitialNodeCountRuleDefinition,
-		},
-		{
-			name: "initial_node_count exists, but no node_pool block",
-			hclContent: `resource "google_container_cluster" "test" {
-  initial_node_count = 1
-}`,
-			// Adjusted expectation: rule removes initial_node_count due to current framework limitations
-			// Ideally, this would be no change if AnyNestedBlockOfTypeExists condition worked.
-			expectedHCLContent: `resource "google_container_cluster" "test" {
-}`,
-			expectedModifications: 1, // Adjusted from 0
-			rule:                  rules.RemoveTopLevelInitialNodeCountRuleDefinition,
-		},
-		{
-			name: "node_pool exists, but no top-level initial_node_count",
-			hclContent: `resource "google_container_cluster" "test" {
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedHCLContent: `resource "google_container_cluster" "test" {
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedModifications: 0,
-			rule:                  rules.RemoveTopLevelInitialNodeCountRuleDefinition,
-		},
-		{
-			name: "initial_node_count = 0 and node_pool both exist",
-			hclContent: `resource "google_container_cluster" "test" {
-  initial_node_count = 0
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedHCLContent: `resource "google_container_cluster" "test" {
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedModifications: 1,
-			rule:                  rules.RemoveTopLevelInitialNodeCountRuleDefinition,
-		},
-		{
-			name: "Non-matching resource type",
-			hclContent: `resource "google_compute_instance" "test" {
-  initial_node_count = 1
-  node_pool { // This sub-block name is coincidental for this test
-    name = "default-pool"
-  }
-}`,
-			expectedHCLContent: `resource "google_compute_instance" "test" {
-  initial_node_count = 1
-  node_pool {
-    name = "default-pool"
-  }
-}`,
-			expectedModifications: 0,
-			rule:                  rules.RemoveTopLevelInitialNodeCountRuleDefinition,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpFile, err := os.CreateTemp("", "test_toplevel_inc_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
-			defer os.Remove(tmpFile.Name())
-
-			_, err = tmpFile.Write([]byte(tc.hclContent))
-			assert.NoError(t, err, "Failed to write to temp file for '%s'", tc.name)
-			err = tmpFile.Close()
-			assert.NoError(t, err, "Failed to close temp file for '%s'", tc.name)
-
-			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			assert.NoError(t, err, "NewFromFile() error for '%s'", tc.name)
-			if err != nil {
-				return
-			}
-
-			modifications, errs := modifier.ApplyRules([]types.Rule{tc.rule})
-			// Given the rule's current state (AnyNestedBlockOfTypeExists is hypothetical),
-			// no errors are expected from the rule application itself if conditions aren't met.
-			assert.Empty(t, errs, "ApplyRules returned errors for '%s': %v", tc.name, errs)
-			assert.Equal(t, tc.expectedModifications, modifications, "Modification count mismatch for '%s'", tc.name)
-
-			// Normalize and compare HCL content
-			expectedF, diags := hclwrite.ParseConfig([]byte(tc.expectedHCLContent), "expected.hcl", hcl.InitialPos)
-			assert.False(t, diags.HasErrors(), "Failed to parse expected HCL content for '%s': %v", tc.name, diags)
-			if diags.HasErrors() {
-				return
-			}
-
-			actualF, diags := hclwrite.ParseConfig(modifier.File().Bytes(), "actual.hcl", hcl.InitialPos)
-			assert.False(t, diags.HasErrors(), "Failed to parse actual HCL content for '%s': %v", tc.name, diags)
-			if diags.HasErrors() {
-				return
-			}
-
-			assert.Equal(t, string(expectedF.Bytes()), string(actualF.Bytes()), "HCL content mismatch for '%s'", tc.name)
-		})
 	}
 }

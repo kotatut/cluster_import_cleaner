@@ -4,11 +4,11 @@ package types
 type ConditionType string
 
 const (
-	AttributeExists       ConditionType = "AttributeExists"
-	AttributeDoesntExists ConditionType = "AttributeDoesntExists"
-	BlockExists           ConditionType = "BlockExists"
-	AttributeValueEquals  ConditionType = "AttributeValueEquals"
-	NullValue             ConditionType = "NullValue"
+	AttributeExists      ConditionType = "AttributeExists"
+	AttributeDoesntExist ConditionType = "AttributeDoesntExist"
+	BlockExists          ConditionType = "BlockExists"
+	AttributeValueEquals ConditionType = "AttributeValueEquals"
+	NullValue            ConditionType = "NullValue"
 )
 
 // ActionType is an enumeration defining the types of actions that can be performed by a Rule.

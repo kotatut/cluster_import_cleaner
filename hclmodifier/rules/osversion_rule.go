@@ -17,7 +17,7 @@ var OsVersionRuleDefinition = types.Rule{
 			Path: []string{"node_config", "windows_node_config"},
 		},
 		{
-			Type: types.NullValue,
+			Type: types.AttributeDoesntExist,
 			Path: []string{"node_config", "windows_node_config", "osversion"},
 		},
 	},
@@ -44,7 +44,7 @@ var OsVersionNodePoolRuleDefinition = types.Rule{
 			Path: []string{"node_config", "windows_node_config"},
 		},
 		{
-			Type: types.NullValue,
+			Type: types.AttributeDoesntExist,
 			Path: []string{"node_config", "windows_node_config", "osversion"},
 		},
 	},
