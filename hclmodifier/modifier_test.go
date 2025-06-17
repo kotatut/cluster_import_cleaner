@@ -1811,46 +1811,421 @@ resource "google_container_cluster" "secondary" {
 	}
 }
 
-func TestApplyAutopilotRule(t *testing.T) {
+func TestAutopilotRules_EmptyHCL(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+	hclContent := ``
+	expectedModifications := 0
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_empty_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	// For empty HCL, NewFromFile is expected to return a non-nil modifier and no error,
+	// or specific error if hclwrite.ParseConfig fails on empty string (which it shouldn't for valid HCL).
+	// Current NewFromFile implementation might return error if file.Body().Blocks() is empty.
+	// This test assumes it handles it by creating an empty body or similar.
+	if err != nil {
+		// If NewFromFile specifically errors on empty valid HCL and that's expected, adjust this.
+		// For now, assume it should proceed and result in 0 modifications.
+		// If it returns nil modifier for empty file, that's also a form of "handling".
+		if modifier == nil { // This implies NewFromFile correctly identified no runnable content.
+			assert.Equal(t, expectedModifications, 0, "Expected 0 modifications for empty HCL if modifier is nil")
+			return
+		}
+		t.Fatalf("NewFromFile() returned an unexpected error for empty HCL: %v", err)
+	}
+
+	allAutopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	allAutopilotRules = append(allAutopilotRules, rules.AutopilotRules...)
+	modifications, ruleErrs := modifier.ApplyRules(allAutopilotRules)
+
+	if len(ruleErrs) > 0 {
+		var errorMessages []string
+		for _, rErr := range ruleErrs {
+			errorMessages = append(errorMessages, rErr.Error())
+		}
+		t.Fatalf("ApplyRules() returned unexpected error(s) for empty HCL: %v", strings.Join(errorMessages, "\n"))
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "Expected 0 modifications for empty HCL")
+	assert.Empty(t, string(modifier.File().Bytes()), "Expected HCL content to remain empty")
+}
+
+func TestAutopilotEnabled_NoConflictingRootFields(t *testing.T) {
 	t.Helper()
 	logger := zap.NewNop()
 
-	type clusterAutoscalingChecks struct {
-		expectBlockExists           bool
-		expectEnabledRemoved        bool
-		expectResourceLimitsRemoved bool
-		expectProfileUnchanged      *string
+	hclContent := `resource "google_container_cluster" "clean_autopilot_cluster" {
+  name             = "clean-autopilot-cluster"
+  enable_autopilot = true
+  location         = "us-central1"
+  addons_config {
+    http_load_balancing { disabled = true }
+  }
+  cluster_autoscaling {
+    autoscaling_profile = "BALANCED" // This whole block should be removed
+  }
+  binary_authorization {
+    evaluation_mode = "DISABLED"
+  }
+}`
+	expectedModifications := 1 // cluster_autoscaling block removal
+	clusterName := "clean_autopilot_cluster"
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_no_conflicting_fields_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
 	}
 
-	type binaryAuthorizationChecks struct {
-		expectBlockExists    bool
-		expectEnabledRemoved bool
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
 	}
 
-	type addonsConfigChecks struct {
-		expectBlockExists                bool
-		expectNetworkPolicyRemoved       bool
-		expectDnsCacheRemoved            bool
-		expectStatefulHaRemoved          bool
-		expectHttpLoadBalancingUnchanged bool
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
 	}
 
-	tests := []struct {
-		name                                string
-		hclContent                          string
-		expectedModifications               int
-		clusterName                         string
-		expectEnableAutopilotAttr           *bool
-		expectedRootAttrsRemoved            []string
-		expectedTopLevelNestedBlocksRemoved []string
-		addonsConfig                        *addonsConfigChecks
-		clusterAutoscaling                  *clusterAutoscalingChecks
-		binaryAuthorization                 *binaryAuthorizationChecks
-		expectNoOtherChanges                bool
-	}{
-		{
-			name: "enable_autopilot is true, all conflicting fields present",
-			hclContent: `resource "google_container_cluster" "autopilot_cluster" {
+	autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+	modifications, ruleErr := modifier.ApplyRules(autopilotRules)
+	if ruleErr != nil {
+		t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "ApplyAutopilotRule() modifications mismatch. HCL content:\n%s\nModified HCL:\n%s", hclContent, string(modifier.File().Bytes()))
+
+	clusterBlock, _ := findBlockInParsedFile(modifier.File(), "google_container_cluster", clusterName)
+	if !assert.NotNil(t, clusterBlock, "google_container_cluster resource '%s' not found. Modified HCL:\n%s", clusterName, string(modifier.File().Bytes())) {
+		return
+	}
+
+	// 1. enable_autopilot attribute check
+	assertAttributeValue(t, modifier, clusterBlock, "enable_autopilot", cty.True)
+
+	// 2. Check cluster_autoscaling block is removed
+	assert.Nil(t, clusterBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil), "Expected 'cluster_autoscaling' block to be removed. Modified HCL:\n%s", string(modifier.File().Bytes()))
+
+	// 3. addons_config checks (should remain)
+	acBlock := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+	assert.NotNil(t, acBlock, "Expected 'addons_config' block to exist.")
+	if acBlock != nil {
+		httpLbBlock := acBlock.Body().FirstMatchingBlock("http_load_balancing", nil)
+		assert.NotNil(t, httpLbBlock, "Expected 'http_load_balancing' block in 'addons_config' to exist.")
+		if httpLbBlock != nil {
+			assertAttributeValue(t, modifier, httpLbBlock, "disabled", cty.True)
+		}
+	}
+
+	// 4. binary_authorization checks (should remain)
+	baBlock := clusterBlock.Body().FirstMatchingBlock("binary_authorization", nil)
+	assert.NotNil(t, baBlock, "Expected 'binary_authorization' block to exist.")
+	if baBlock != nil {
+		assertAttributeValue(t, modifier, baBlock, "evaluation_mode", cty.StringVal("DISABLED"))
+		assert.Nil(t, baBlock.Body().GetAttribute("enabled"), "Expected 'enabled' attribute in 'binary_authorization' to be absent if not originally present and not conflicting.")
+	}
+
+	// 5. No root attributes should have been removed (other than enable_autopilot if it were false)
+	assert.NotNil(t, clusterBlock.Body().GetAttribute("location"), "'location' attribute should not be removed.")
+}
+
+func TestAutopilotEnabled_PartialConflictingRootAttributes(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	hclContent := `resource "google_container_cluster" "partial_autopilot" {
+  name                  = "partial-autopilot"
+  enable_autopilot      = true
+  enable_shielded_nodes = true
+  default_max_pods_per_node = 110
+}`
+	expectedModifications := 2
+	clusterName := "partial_autopilot"
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_partial_conflicting_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+	}
+
+	autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+	modifications, ruleErr := modifier.ApplyRules(autopilotRules)
+	if ruleErr != nil {
+		t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "ApplyAutopilotRule() modifications mismatch. HCL content:\n%s\nModified HCL:\n%s", hclContent, string(modifier.File().Bytes()))
+
+	clusterBlock, _ := findBlockInParsedFile(modifier.File(), "google_container_cluster", clusterName)
+	if !assert.NotNil(t, clusterBlock, "google_container_cluster resource '%s' not found. Modified HCL:\n%s", clusterName, string(modifier.File().Bytes())) {
+		return
+	}
+
+	// 1. enable_autopilot attribute check
+	assertAttributeValue(t, modifier, clusterBlock, "enable_autopilot", cty.True)
+
+	// 2. Specified root attributes are removed
+	assert.Nil(t, clusterBlock.Body().GetAttribute("enable_shielded_nodes"), "Expected 'enable_shielded_nodes' to be removed. Modified HCL:\n%s", string(modifier.File().Bytes()))
+	assert.Nil(t, clusterBlock.Body().GetAttribute("default_max_pods_per_node"), "Expected 'default_max_pods_per_node' to be removed. Modified HCL:\n%s", string(modifier.File().Bytes()))
+
+	// 3. Ensure 'name' attribute is still present (was not part of removal list)
+	assert.NotNil(t, clusterBlock.Body().GetAttribute("name"), "'name' attribute should not be removed.")
+}
+
+func TestAutopilotRules_NoGKEResource(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+	hclContent := `resource "google_compute_instance" "vm" {
+  name = "my-vm"
+}`
+	expectedModifications := 0
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_no_gke_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	originalContent := []byte(hclContent) // Save original content for comparison
+	if _, err := tmpFile.Write(originalContent); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+	}
+
+	allAutopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	allAutopilotRules = append(allAutopilotRules, rules.AutopilotRules...)
+	modifications, ruleErrs := modifier.ApplyRules(allAutopilotRules)
+
+	if len(ruleErrs) > 0 {
+		var errorMessages []string
+		for _, rErr := range ruleErrs {
+			errorMessages = append(errorMessages, rErr.Error())
+		}
+		t.Fatalf("ApplyRules() returned unexpected error(s): %v. HCL content:\n%s", strings.Join(errorMessages, "\n"), hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "Expected 0 modifications for HCL with no GKE resource")
+	assert.Equal(t, string(originalContent), string(modifier.File().Bytes()), "HCL content should remain unchanged")
+}
+
+func TestAutopilotNotPresent_ConflictingFieldsPresent(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	hclContent := `resource "google_container_cluster" "existing_cluster" {
+  name                  = "existing-cluster"
+  cluster_ipv4_cidr     = "10.0.0.0/8"
+  enable_shielded_nodes = true
+  node_pool {
+    name = "default-pool"
+  }
+  addons_config {
+    network_policy_config {
+      disabled = false
+    }
+  }
+}`
+	expectedModifications := 0
+	clusterName := "existing_cluster"
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_not_present_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+	}
+
+	autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+	modifications, ruleErr := modifier.ApplyRules(autopilotRules)
+	if ruleErr != nil {
+		t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "ApplyAutopilotRule() modifications mismatch. HCL content:\n%s\nModified HCL:\n%s", hclContent, string(modifier.File().Bytes()))
+
+	clusterBlock, _ := findBlockInParsedFile(modifier.File(), "google_container_cluster", clusterName)
+	if !assert.NotNil(t, clusterBlock, "google_container_cluster resource '%s' not found. Modified HCL:\n%s", clusterName, string(modifier.File().Bytes())) {
+		return
+	}
+
+	// 1. enable_autopilot attribute should remain absent
+	assert.Nil(t, clusterBlock.Body().GetAttribute("enable_autopilot"), "Expected 'enable_autopilot' attribute to remain absent. Modified HCL:\n%s", string(modifier.File().Bytes()))
+
+	// 2. Check other root attributes remain
+	assertAttributeValue(t, modifier, clusterBlock, "cluster_ipv4_cidr", cty.StringVal("10.0.0.0/8"))
+	assertAttributeValue(t, modifier, clusterBlock, "enable_shielded_nodes", cty.True)
+
+	// 3. Check node_pool remains
+	npBlock, _ := findNodePoolInBlock(clusterBlock, "default-pool", modifier)
+	assert.NotNil(t, npBlock, "Expected 'node_pool' with name 'default-pool' to exist.")
+
+	// 4. addons_config checks
+	acBlock := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+	assert.NotNil(t, acBlock, "Expected 'addons_config' block to exist.")
+	if acBlock != nil {
+		npcBlock := acBlock.Body().FirstMatchingBlock("network_policy_config", nil)
+		assert.NotNil(t, npcBlock, "Expected 'network_policy_config' block in 'addons_config' to exist.")
+		if npcBlock != nil {
+			assertAttributeValue(t, modifier, npcBlock, "disabled", cty.False)
+		}
+	}
+}
+
+func TestAutopilotDisabled_ConflictingFieldsPresent(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	hclContent := `resource "google_container_cluster" "standard_cluster" {
+  name                  = "standard-cluster"
+  enable_autopilot      = false
+  cluster_ipv4_cidr     = "10.0.0.0/8"
+  enable_shielded_nodes = true
+  node_pool {
+    name = "default-pool"
+  }
+  cluster_autoscaling {
+    enabled = true
+    autoscaling_profile = "BALANCED"
+  }
+  addons_config {
+    dns_cache_config {
+      enabled = true
+    }
+    http_load_balancing {
+      disabled = false
+    }
+  }
+}`
+	expectedModifications := 1
+	clusterName := "standard_cluster"
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_disabled_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+	}
+
+	autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+	modifications, ruleErr := modifier.ApplyRules(autopilotRules)
+	if ruleErr != nil {
+		t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "ApplyAutopilotRule() modifications mismatch. HCL content:\n%s\nModified HCL:\n%s", hclContent, string(modifier.File().Bytes()))
+
+	clusterBlock, _ := findBlockInParsedFile(modifier.File(), "google_container_cluster", clusterName)
+	if !assert.NotNil(t, clusterBlock, "google_container_cluster resource '%s' not found. Modified HCL:\n%s", clusterName, string(modifier.File().Bytes())) {
+		return
+	}
+
+	// 1. enable_autopilot attribute check
+	assert.Nil(t, clusterBlock.Body().GetAttribute("enable_autopilot"), "Expected 'enable_autopilot' attribute to be removed. Modified HCL:\n%s", string(modifier.File().Bytes()))
+
+	// 2. Check other root attributes remain
+	assertAttributeValue(t, modifier, clusterBlock, "cluster_ipv4_cidr", cty.StringVal("10.0.0.0/8"))
+	assertAttributeValue(t, modifier, clusterBlock, "enable_shielded_nodes", cty.True)
+
+	// 3. Check node_pool remains
+	npBlock, _ := findNodePoolInBlock(clusterBlock, "default-pool", modifier)
+	assert.NotNil(t, npBlock, "Expected 'node_pool' with name 'default-pool' to exist.")
+
+	// 4. cluster_autoscaling checks
+	caBlock := clusterBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil)
+	assert.NotNil(t, caBlock, "Expected 'cluster_autoscaling' block to exist.")
+	if caBlock != nil {
+		assertAttributeValue(t, modifier, caBlock, "enabled", cty.True)
+		assertAttributeValue(t, modifier, caBlock, "autoscaling_profile", cty.StringVal("BALANCED"))
+	}
+
+	// 5. addons_config checks
+	acBlock := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+	assert.NotNil(t, acBlock, "Expected 'addons_config' block to exist.")
+	if acBlock != nil {
+		dnsCacheBlock := acBlock.Body().FirstMatchingBlock("dns_cache_config", nil)
+		assert.NotNil(t, dnsCacheBlock, "Expected 'dns_cache_config' block in 'addons_config' to exist.")
+		if dnsCacheBlock != nil {
+			assertAttributeValue(t, modifier, dnsCacheBlock, "enabled", cty.True)
+		}
+
+		httpLbBlock := acBlock.Body().FirstMatchingBlock("http_load_balancing", nil)
+		assert.NotNil(t, httpLbBlock, "Expected 'http_load_balancing' block in 'addons_config' to exist.")
+		if httpLbBlock != nil {
+			assertAttributeValue(t, modifier, httpLbBlock, "disabled", cty.False)
+		}
+	}
+}
+
+func TestAutopilotEnabled_ConflictingFieldsPresent(t *testing.T) {
+	t.Helper()
+	logger := zap.NewNop()
+
+	hclContent := `resource "google_container_cluster" "autopilot_cluster" {
   name                          = "autopilot-cluster"
   location                      = "us-central1"
   enable_autopilot              = true
@@ -1911,368 +2286,124 @@ func TestApplyAutopilotRule(t *testing.T) {
     evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
     enabled = true
   }
-}`,
-			expectedModifications:     14,
-			clusterName:               "autopilot_cluster",
-			expectEnableAutopilotAttr: boolPtr(true),
-			expectedRootAttrsRemoved: []string{
-				"cluster_ipv4_cidr",
-				"enable_shielded_nodes",
-				"remove_default_node_pool",
-				"default_max_pods_per_node",
-				"enable_intranode_visibility",
-			},
-			expectedTopLevelNestedBlocksRemoved: []string{
-				"network_policy",
-				"node_pool",
-				"cluster_autoscaling",
-				"node_config",
-			},
-			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:                true,
-				expectNetworkPolicyRemoved:       true,
-				expectDnsCacheRemoved:            true,
-				expectStatefulHaRemoved:          true,
-				expectHttpLoadBalancingUnchanged: true,
-			},
-			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists: false,
-			},
-			binaryAuthorization: &binaryAuthorizationChecks{
-				expectBlockExists:    true,
-				expectEnabledRemoved: true,
-			},
-		},
-		{
-			name: "enable_autopilot is false, conflicting fields present",
-			hclContent: `resource "google_container_cluster" "standard_cluster" {
-  name                  = "standard-cluster"
-  enable_autopilot      = false
-  cluster_ipv4_cidr     = "10.0.0.0/8"
-  enable_shielded_nodes = true
-  node_pool {
-    name = "default-pool"
-  }
-  cluster_autoscaling {
-    enabled = true
-    autoscaling_profile = "BALANCED"
-  }
-  addons_config {
-    dns_cache_config {
-      enabled = true
-    }
-    http_load_balancing {
-      disabled = false
-    }
-  }
-}`,
-			expectedModifications:               1,
-			clusterName:                         "standard_cluster",
-			expectEnableAutopilotAttr:           nil,
-			expectedRootAttrsRemoved:            []string{},
-			expectedTopLevelNestedBlocksRemoved: []string{},
-			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:                true,
-				expectDnsCacheRemoved:            false,
-				expectHttpLoadBalancingUnchanged: true,
-			},
-			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           true,                  // It should exist
-				expectEnabledRemoved:        false,                 // The 'enabled' attribute within it should not be removed
-				expectResourceLimitsRemoved: false,                 // resource_limits is not present in this HCL, so this is fine
-				expectProfileUnchanged:      stringPtr("BALANCED"), // Profile should be "BALANCED"
-			},
-			binaryAuthorization:  nil,
-			expectNoOtherChanges: true,
-		},
-		{
-			name: "enable_autopilot not present, conflicting fields present",
-			hclContent: `resource "google_container_cluster" "existing_cluster" {
-  name                  = "existing-cluster"
-  cluster_ipv4_cidr     = "10.0.0.0/8"
-  enable_shielded_nodes = true
-  node_pool {
-    name = "default-pool"
-  }
-  addons_config {
-    network_policy_config {
-      disabled = false
-    }
-  }
-}`,
-			expectedModifications:               0,
-			clusterName:                         "existing_cluster",
-			expectEnableAutopilotAttr:           nil,
-			expectedRootAttrsRemoved:            []string{},
-			expectedTopLevelNestedBlocksRemoved: []string{},
-			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:          true,
-				expectNetworkPolicyRemoved: false,
-			},
-			expectNoOtherChanges: true,
-		},
-		{
-			name: "enable_autopilot is true, no conflicting fields present",
-			hclContent: `resource "google_container_cluster" "clean_autopilot_cluster" {
-  name             = "clean-autopilot-cluster"
-  enable_autopilot = true
-  location         = "us-central1"
-  addons_config {
-    http_load_balancing { disabled = true }
-  }
-  cluster_autoscaling {
-    autoscaling_profile = "BALANCED"
-  }
-  binary_authorization {
-    evaluation_mode = "DISABLED"
-  }
-}`,
-			expectedModifications:               1, // <--- CHANGE THIS TO 1
-			clusterName:                         "clean_autopilot_cluster",
-			expectEnableAutopilotAttr:           boolPtr(true),
-			expectedRootAttrsRemoved:            []string{},
-			expectedTopLevelNestedBlocksRemoved: []string{},
-			addonsConfig: &addonsConfigChecks{
-				expectBlockExists:                true,
-				expectHttpLoadBalancingUnchanged: true,
-			},
-			clusterAutoscaling: &clusterAutoscalingChecks{
-				expectBlockExists:           false,
-				expectEnabledRemoved:        false,
-				expectResourceLimitsRemoved: false,
-				expectProfileUnchanged:      nil,
-			},
-			binaryAuthorization: &binaryAuthorizationChecks{
-				expectBlockExists:    true,
-				expectEnabledRemoved: false,
-			},
-			expectNoOtherChanges: true,
-		},
-		{
-			name: "No google_container_cluster blocks",
-			hclContent: `resource "google_compute_instance" "vm" {
-  name = "my-vm"
-}`,
-			expectedModifications: 0,
-			clusterName:           "",
-			expectNoOtherChanges:  true,
-		},
-		{
-			name:                  "Empty HCL content",
-			hclContent:            ``,
-			expectedModifications: 0,
-			clusterName:           "",
-			expectNoOtherChanges:  true,
-		},
-		{
-			name: "Autopilot true, only some attributes to remove",
-			hclContent: `resource "google_container_cluster" "partial_autopilot" {
-  name                  = "partial-autopilot"
-  enable_autopilot      = true
-  enable_shielded_nodes = true
-  default_max_pods_per_node = 110
-}`,
-			expectedModifications:               2,
-			clusterName:                         "partial_autopilot",
-			expectEnableAutopilotAttr:           boolPtr(true),
-			expectedRootAttrsRemoved:            []string{"enable_shielded_nodes", "default_max_pods_per_node"},
-			expectedTopLevelNestedBlocksRemoved: []string{},
-			expectNoOtherChanges:                false,
-		},
+}`
+	expectedModifications := 14
+	clusterName := "autopilot_cluster"
+
+	tempDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_conflicting_*.hcl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			tmpFile, err := os.CreateTemp(tempDir, "test_autopilot_*.hcl")
-			if err != nil {
-				t.Fatalf("Failed to create temp file: %v", err)
-			}
+	if _, err := tmpFile.Write([]byte(hclContent)); err != nil {
+		tmpFile.Close()
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
 
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
-				tmpFile.Close()
-				t.Fatalf("Failed to write to temp file: %v", err)
-			}
-			if err := tmpFile.Close(); err != nil {
-				t.Fatalf("Failed to close temp file: %v", err)
-			}
+	modifier, err := NewFromFile(tmpFile.Name(), logger)
+	if err != nil {
+		t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+	}
 
-			modifier, err := NewFromFile(tmpFile.Name(), logger)
-			if err != nil {
-				if tc.hclContent == "" && tc.expectedModifications == 0 {
-					if modifier == nil {
-						return
-					}
-				} else {
-					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+	autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
+	autopilotRules = append(autopilotRules, rules.AutopilotRules...)
+	modifications, ruleErr := modifier.ApplyRules(autopilotRules)
+	if ruleErr != nil {
+		t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, hclContent)
+	}
+
+	assert.Equal(t, expectedModifications, modifications, "ApplyAutopilotRule() modifications mismatch. HCL content:\n%s\nModified HCL:\n%s", hclContent, string(modifier.File().Bytes()))
+
+	clusterBlock, _ := findBlockInParsedFile(modifier.File(), "google_container_cluster", clusterName)
+	if !assert.NotNil(t, clusterBlock, "google_container_cluster resource '%s' not found after ApplyAutopilotRule. Modified HCL:\n%s", clusterName, string(modifier.File().Bytes())) {
+		return
+	}
+
+	// 1. enable_autopilot attribute check
+	enableAutopilotHCLAttr := clusterBlock.Body().GetAttribute("enable_autopilot")
+	assert.NotNil(t, enableAutopilotHCLAttr, "Expected 'enable_autopilot' attribute to exist. Modified HCL:\n%s", string(modifier.File().Bytes()))
+	if enableAutopilotHCLAttr != nil {
+		val, err := modifier.GetAttributeValue(enableAutopilotHCLAttr)
+		assert.NoError(t, err, "Error getting value of 'enable_autopilot'")
+		if err == nil {
+			assert.Equal(t, cty.Bool, val.Type(), "Expected 'enable_autopilot' to be boolean")
+			assert.True(t, val.True(), "Expected 'enable_autopilot' to be true, but got %v", val.True())
+		}
+	}
+
+	// 2. Root-level attributes removal
+	expectedRootAttrsRemoved := []string{
+		"cluster_ipv4_cidr",
+		"enable_shielded_nodes",
+		"remove_default_node_pool",
+		"default_max_pods_per_node",
+		"enable_intranode_visibility",
+	}
+	for _, attrName := range expectedRootAttrsRemoved {
+		assert.Nil(t, clusterBlock.Body().GetAttribute(attrName), "Expected root attribute '%s' to be removed, but it was found. Modified HCL:\n%s", attrName, string(modifier.File().Bytes()))
+	}
+
+	// 3. Top-level nested blocks removal
+	expectedTopLevelNestedBlocksRemoved := []string{
+		"network_policy",
+		"node_pool", // All node_pool blocks should be removed
+		"cluster_autoscaling",
+		"node_config",
+	}
+	for _, blockTypeName := range expectedTopLevelNestedBlocksRemoved {
+		if blockTypeName == "node_pool" {
+			foundNodePools := false
+			for _, nestedB := range clusterBlock.Body().Blocks() {
+				if nestedB.Type() == "node_pool" {
+					foundNodePools = true
+					break
 				}
 			}
+			assert.False(t, foundNodePools, "Expected all nested blocks of type 'node_pool' to be removed, but at least one was found. Modified HCL:\n%s", string(modifier.File().Bytes()))
+		} else {
+			assert.Nil(t, clusterBlock.Body().FirstMatchingBlock(blockTypeName, nil), "Expected nested block '%s' to be removed, but it was found. Modified HCL:\n%s", blockTypeName, string(modifier.File().Bytes()))
+		}
+	}
 
-			autopilotRules := []types.Rule{rules.RuleHandleAutopilotFalse}
-			autopilotRules = append(autopilotRules, rules.AutopilotRules...)
-			modifications, ruleErr := modifier.ApplyRules(autopilotRules)
-			if ruleErr != nil {
-				t.Fatalf("ApplyAutopilotRule() returned error = %v. HCL content:\n%s", ruleErr, tc.hclContent)
-			}
+	// 4. addons_config checks
+	acBlockInHCL := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
+	assert.NotNil(t, acBlockInHCL, "Expected 'addons_config' block to exist, but it was not found")
+	if acBlockInHCL != nil {
+		assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("network_policy_config", nil), "Expected 'network_policy_config' in 'addons_config' to be removed")
+		assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("dns_cache_config", nil), "Expected 'dns_cache_config' in 'addons_config' to be removed")
+		assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("stateful_ha_config", nil), "Expected 'stateful_ha_config' in 'addons_config' to be removed")
+		assert.NotNil(t, acBlockInHCL.Body().FirstMatchingBlock("http_load_balancing", nil), "Expected 'http_load_balancing' in 'addons_config' to be present, but it was not found")
+	}
 
-			if modifications != tc.expectedModifications {
-				t.Errorf("ApplyAutopilotRule() modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
-			}
-
-			if tc.clusterName == "" {
-				if tc.expectedModifications == 0 {
-					return
-				}
-				t.Logf("Test %s: No clusterName specified, but expectedModifications is %d. Skipping detailed checks.", tc.name, tc.expectedModifications)
-				return
-			}
-
-			var clusterBlock *hclwrite.Block
-			// Use modifier.File() which contains the HCL content after rule application
-			clusterBlock, _ = findBlockInParsedFile(modifier.File(), "google_container_cluster", tc.clusterName)
-
-			if clusterBlock == nil {
-				// If no cluster block is found, but we expected modifications or specific blocks/attributes to exist, then fail.
-				if tc.expectedModifications > 0 ||
-					(tc.expectEnableAutopilotAttr != nil && *tc.expectEnableAutopilotAttr) || // if enable_autopilot was expected to be true
-					(tc.addonsConfig != nil && tc.addonsConfig.expectBlockExists) ||
-					(tc.clusterAutoscaling != nil && tc.clusterAutoscaling.expectBlockExists) ||
-					(tc.binaryAuthorization != nil && tc.binaryAuthorization.expectBlockExists) {
-					t.Fatalf("google_container_cluster resource '%s' not found after ApplyAutopilotRule, but was expected. HCL:\n%s", tc.clusterName, string(modifier.File().Bytes()))
-				}
-				// If block is not found and nothing was expected to be there, it's fine.
-				return
-			}
-
-			// 1. enable_autopilot attribute check
-			enableAutopilotHCLAttr := clusterBlock.Body().GetAttribute("enable_autopilot")
-			if tc.expectEnableAutopilotAttr == nil { // Expect removed or to be false (which rule RuleHandleAutopilotFalse handles by removing)
-				assert.Nil(t, enableAutopilotHCLAttr, "Expected 'enable_autopilot' attribute to be removed or absent, but found in test: %s. Modified HCL:\n%s", tc.name, string(modifier.File().Bytes()))
-			} else { // Expect present and true
-				assert.NotNil(t, enableAutopilotHCLAttr, "Expected 'enable_autopilot' attribute to exist, but it was not found in test: %s. Modified HCL:\n%s", tc.name, string(modifier.File().Bytes()))
-				if enableAutopilotHCLAttr != nil {
-					val, err := modifier.GetAttributeValue(enableAutopilotHCLAttr)
-					assert.NoError(t, err, "Error getting value of 'enable_autopilot' in test: %s", tc.name)
-					if err == nil {
-						assert.Equal(t, cty.Bool, val.Type(), "Expected 'enable_autopilot' to be boolean in test: %s", tc.name)
-						assert.Equal(t, *tc.expectEnableAutopilotAttr, val.True(), "Expected 'enable_autopilot' to be %v, but got %v in test: %s", *tc.expectEnableAutopilotAttr, val.True(), tc.name)
-					}
-				}
-			}
-
-			// 2. Root-level attributes removal
-			for _, attrName := range tc.expectedRootAttrsRemoved {
-				assert.Nil(t, clusterBlock.Body().GetAttribute(attrName), "Expected root attribute '%s' to be removed, but it was found in test: %s. Modified HCL:\n%s", attrName, tc.name, string(modifier.File().Bytes()))
-			}
-
-			// 3. Top-level nested blocks removal
-			for _, blockTypeName := range tc.expectedTopLevelNestedBlocksRemoved {
-				if blockTypeName == "node_pool" {
-					foundNodePools := false
-					for _, nestedB := range clusterBlock.Body().Blocks() {
-						if nestedB.Type() == "node_pool" {
-							foundNodePools = true
-							break
-						}
-					}
-					assert.False(t, foundNodePools, "Expected all nested blocks of type 'node_pool' to be removed, but at least one was found in test: %s. Modified HCL:\n%s", tc.name, string(modifier.File().Bytes()))
-				} else {
-					assert.Nil(t, clusterBlock.Body().FirstMatchingBlock(blockTypeName, nil), "Expected nested block '%s' to be removed, but it was found in test: %s. Modified HCL:\n%s", blockTypeName, tc.name, string(modifier.File().Bytes()))
-				}
-			}
-
-			// 4. addons_config checks
-			acBlockInHCL := clusterBlock.Body().FirstMatchingBlock("addons_config", nil)
-			if tc.addonsConfig != nil {
-				if tc.addonsConfig.expectBlockExists {
-					assert.NotNil(t, acBlockInHCL, "Expected 'addons_config' block to exist, but it was not found in test: %s", tc.name)
-					if acBlockInHCL != nil {
-						if tc.addonsConfig.expectNetworkPolicyRemoved {
-							assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("network_policy_config", nil), "Expected 'network_policy_config' in 'addons_config' to be removed in test: %s", tc.name)
-						}
-						if tc.addonsConfig.expectDnsCacheRemoved {
-							assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("dns_cache_config", nil), "Expected 'dns_cache_config' in 'addons_config' to be removed in test: %s", tc.name)
-						}
-						if tc.addonsConfig.expectStatefulHaRemoved {
-							assert.Nil(t, acBlockInHCL.Body().FirstMatchingBlock("stateful_ha_config", nil), "Expected 'stateful_ha_config' in 'addons_config' to be removed in test: %s", tc.name)
-						}
-						if tc.addonsConfig.expectHttpLoadBalancingUnchanged {
-							assert.NotNil(t, acBlockInHCL.Body().FirstMatchingBlock("http_load_balancing", nil), "Expected 'http_load_balancing' in 'addons_config' to be present, but it was not found in test: %s", tc.name)
-						}
-					}
-				} else {
-					assert.Nil(t, acBlockInHCL, "Expected 'addons_config' block to be removed, but it was found in test: %s", tc.name)
-				}
-			}
-
-			// 5. cluster_autoscaling checks
-			caBlockInHCL := clusterBlock.Body().FirstMatchingBlock("cluster_autoscaling", nil)
-			if tc.clusterAutoscaling != nil {
-				if tc.clusterAutoscaling.expectBlockExists {
-					assert.NotNil(t, caBlockInHCL, "Expected 'cluster_autoscaling' block to exist, but it was not found in test: %s", tc.name)
-					if caBlockInHCL != nil {
-						enabledAttr := caBlockInHCL.Body().GetAttribute("enabled")
-						if tc.clusterAutoscaling.expectEnabledRemoved {
-							assert.Nil(t, enabledAttr, "Expected 'enabled' attribute in 'cluster_autoscaling' to be removed, but it was found in test: %s", tc.name)
-						} else if enabledAttr != nil { // If not expected removed, and it's there, check its value (assuming it's true if present and not explicitly removed)
-							val, err := modifier.GetAttributeValue(enabledAttr)
-							assert.NoError(t, err)
-							if err == nil {
-								assert.True(t, val.True(), "Expected 'cluster_autoscaling.enabled' to be true if present and not removed in test: %s", tc.name)
-							}
-						}
-
-						if tc.clusterAutoscaling.expectResourceLimitsRemoved {
-							assert.Nil(t, caBlockInHCL.Body().FirstMatchingBlock("resource_limits", nil), "Expected 'resource_limits' block in 'cluster_autoscaling' to be removed, but it was found in test: %s", tc.name)
-						}
-
-						profileAttr := caBlockInHCL.Body().GetAttribute("autoscaling_profile")
-						if tc.clusterAutoscaling.expectProfileUnchanged != nil {
-							assert.NotNil(t, profileAttr, "Expected 'autoscaling_profile' attribute in 'cluster_autoscaling' to exist, but it was not found in test: %s", tc.name)
-							if profileAttr != nil {
-								val, err := modifier.GetAttributeValue(profileAttr)
-								assert.NoError(t, err, "Error getting 'autoscaling_profile' value in test: %s", tc.name)
-								if err == nil {
-									assert.True(t, val.Type() == cty.String, "Expected 'autoscaling_profile' to be string in test: %s", tc.name)
-									assert.Equal(t, *tc.clusterAutoscaling.expectProfileUnchanged, val.AsString(), "Expected 'autoscaling_profile' to be '%s', got '%s' in test: %s", *tc.clusterAutoscaling.expectProfileUnchanged, val.AsString(), tc.name)
-								}
-							}
-						} else if tc.clusterAutoscaling.expectBlockExists && strings.Contains(tc.hclContent, "autoscaling_profile =") {
-							// If the block is expected to exist, but profile is nil in checks,
-							// and profile was in input, it implies profile should also be gone (unless autopilot is true, where whole block is gone)
-							if tc.expectEnableAutopilotAttr == nil || !*tc.expectEnableAutopilotAttr { // only if not autopilot=true case
-								assert.Nil(t, profileAttr, "Expected 'autoscaling_profile' to be removed or not present if not explicitly checked in test: %s", tc.name)
-							}
-						}
-					}
-				} else {
-					assert.Nil(t, caBlockInHCL, "Expected 'cluster_autoscaling' block to be removed, but it was found in test: %s", tc.name)
-				}
-			}
-
-			// 6. binary_authorization checks
-			baBlockInHCL := clusterBlock.Body().FirstMatchingBlock("binary_authorization", nil)
-			if tc.binaryAuthorization != nil {
-				if tc.binaryAuthorization.expectBlockExists {
-					assert.NotNil(t, baBlockInHCL, "Expected 'binary_authorization' block to exist, but it was not found in test: %s", tc.name)
-					if baBlockInHCL != nil {
-						enabledAttr := baBlockInHCL.Body().GetAttribute("enabled")
-						if tc.binaryAuthorization.expectEnabledRemoved {
-							assert.Nil(t, enabledAttr, "Expected 'enabled' attribute in 'binary_authorization' to be removed, but it was found in test: %s", tc.name)
-						} else if enabledAttr != nil { // Check it's still there if not expected to be removed
-							assert.NotNil(t, enabledAttr, "'enabled' attribute in 'binary_authorization' should be present if not expected to be removed in test: %s", tc.name)
-						}
-					}
-				} else {
-					assert.Nil(t, baBlockInHCL, "Expected 'binary_authorization' block to be removed, but it was found in test: %s", tc.name)
-				}
-			}
-		})
+	// 5. binary_authorization checks
+	baBlockInHCL := clusterBlock.Body().FirstMatchingBlock("binary_authorization", nil)
+	assert.NotNil(t, baBlockInHCL, "Expected 'binary_authorization' block to exist, but it was not found")
+	if baBlockInHCL != nil {
+		assert.Nil(t, baBlockInHCL.Body().GetAttribute("enabled"), "Expected 'enabled' attribute in 'binary_authorization' to be removed, but it was found")
 	}
 }
 
 // Helper Functions
+
+// assertAttributeValue is a helper to check attribute existence and value within a block
+func assertAttributeValue(t *testing.T, mod *Modifier, block *hclwrite.Block, attrName string, expectedValue cty.Value) {
+	t.Helper()
+	attr := block.Body().GetAttribute(attrName)
+	if !assert.NotNil(t, attr, "Attribute '%s' should exist in block '%s'", attrName, block.Type()) {
+		return
+	}
+	val, err := mod.GetAttributeValue(attr)
+	assert.NoError(t, err, "Error getting value of '%s' in block '%s'", attrName, block.Type())
+	if err == nil {
+		assert.Equal(t, expectedValue.Type(), val.Type(), "Expected attribute '%s' in block '%s' to be type %s, but got %s", attrName, block.Type(), expectedValue.Type().FriendlyName(), val.Type().FriendlyName())
+		assert.True(t, expectedValue.Equals(val).True(), "Expected attribute '%s' in block '%s' to be %v, but got %v", attrName, block.Type(), expectedValue.GoString(), val.GoString())
+	}
+}
+
 func intPtr(i int) *int {
 	return &i
 }
