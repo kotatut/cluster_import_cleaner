@@ -1059,7 +1059,7 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 
 	tests := []struct {
 		name                                  string
-		hclContent                            string
+		hclContentFile                        string
 		expectedModifications                 int
 		expectEnabledAttributeRemoved         bool
 		resourceLabelsToVerify                []string
@@ -1067,14 +1067,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 		binaryAuthorizationShouldHaveEvalMode bool
 	}{
 		{
-			name: "Both enabled and evaluation_mode present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  binary_authorization {
-    enabled          = true
-    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
-  }
-}`,
+			name:                                  "Both enabled and evaluation_mode present",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_BothPresent.tf",
 			expectedModifications:                 1,
 			expectEnabledAttributeRemoved:         true,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1082,13 +1076,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
-			name: "Only enabled present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  binary_authorization {
-    enabled = true
-  }
-}`,
+			name:                                  "Only enabled present",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_OnlyEnabled.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1096,13 +1085,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
-			name: "Only evaluation_mode present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  binary_authorization {
-    evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
-  }
-}`,
+			name:                                  "Only evaluation_mode present",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_OnlyEvaluationMode.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1110,13 +1094,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
-			name: "Neither enabled nor evaluation_mode present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  binary_authorization {
-    some_other_attr = "value"
-  }
-}`,
+			name:                                  "Neither enabled nor evaluation_mode present",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_NeitherPresent.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1124,11 +1103,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
-			name: "binary_authorization block present but empty",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  binary_authorization {}
-}`,
+			name:                                  "binary_authorization block present but empty",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_EmptyBlock.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1136,11 +1112,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
-			name: "binary_authorization block missing entirely",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name     = "primary-cluster"
-  location = "us-central1"
-}`,
+			name:                                  "binary_authorization block missing entirely",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_NoBlock.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
@@ -1148,14 +1121,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: false,
 		},
 		{
-			name: "Non-matching resource type with binary_authorization",
-			hclContent: `resource "google_compute_instance" "default" {
-  name = "test-instance"
-  binary_authorization {
-    enabled          = true
-    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
-  }
-}`,
+			name:                                  "Non-matching resource type with binary_authorization",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_NonMatchingResource.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                []string{"google_compute_instance", "default"},
@@ -1163,20 +1130,8 @@ func TestApplyBinaryAuthorizationRule(t *testing.T) {
 			binaryAuthorizationShouldHaveEvalMode: true,
 		},
 		{
-			name: "Multiple GKE resources, one with conflict",
-			hclContent: `resource "google_container_cluster" "gke_one" {
-  name = "gke-one"
-  binary_authorization {
-    enabled          = true
-    evaluation_mode  = "PROJECT_SINGLETON_POLICY_ENFORCE"
-  }
-}
-resource "google_container_cluster" "gke_two" {
-  name = "gke-two"
-  binary_authorization {
-    evaluation_mode = "DISABLED"
-  }
-}`,
+			name:                                  "Multiple GKE resources, one with conflict",
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_MultipleResourcesOneMatch.tf",
 			expectedModifications:                 1,
 			expectEnabledAttributeRemoved:         true,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "gke_one"},
@@ -1185,7 +1140,7 @@ resource "google_container_cluster" "gke_two" {
 		},
 		{
 			name:                                  "Empty HCL content",
-			hclContent:                            ``,
+			hclContentFile:                        "testdata/TestApplyBinaryAuthorizationRule_EmptyFile.tf",
 			expectedModifications:                 0,
 			expectEnabledAttributeRemoved:         false,
 			resourceLabelsToVerify:                nil,
@@ -1196,13 +1151,18 @@ resource "google_container_cluster" "gke_two" {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
 			tempDir := t.TempDir()
 			tmpFile, err := os.CreateTemp(tempDir, "test_rule3_*.hcl")
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
 
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+			if _, err := tmpFile.Write(hclContent); err != nil {
 				tmpFile.Close()
 				t.Fatalf("Failed to write to temp file: %v", err)
 			}
@@ -1212,7 +1172,7 @@ resource "google_container_cluster" "gke_two" {
 
 			modifier, err := NewFromFile(tmpFile.Name(), logger)
 			if err != nil {
-				if tc.hclContent == "" && tc.expectedModifications == 0 {
+				if string(hclContent) == "" && tc.expectedModifications == 0 {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
@@ -1224,7 +1184,7 @@ resource "google_container_cluster" "gke_two" {
 						return
 					}
 				} else {
-					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
 				}
 			}
 
@@ -1234,12 +1194,12 @@ resource "google_container_cluster" "gke_two" {
 				for _, e := range errs {
 					errorMessages += e.Error() + "\n"
 				}
-				t.Fatalf("ApplyRules(BinaryAuthorizationRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
+				t.Fatalf("ApplyRules(BinaryAuthorizationRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyRules(BinaryAuthorizationRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+					modifications, tc.expectedModifications, hclContent, string(modifier.File().Bytes()))
 			}
 
 			modifiedContentBytes := modifier.File().Bytes()
@@ -1261,7 +1221,7 @@ resource "google_container_cluster" "gke_two" {
 				}
 
 				if targetResourceBlock == nil && (tc.expectedModifications > 0 || tc.expectEnabledAttributeRemoved || tc.binaryAuthorizationShouldExist) {
-					if !(tc.hclContent == "" && tc.expectedModifications == 0) {
+					if !(string(hclContent) == "" && tc.expectedModifications == 0) {
 						t.Fatalf("Could not find the target resource block type '%s' with name '%s' for verification. Modified HCL:\n%s", blockType, blockName, string(modifiedContentBytes))
 					}
 				}
@@ -1277,12 +1237,12 @@ resource "google_container_cluster" "gke_two" {
 
 					if !tc.binaryAuthorizationShouldExist {
 						if binaryAuthBlock != nil {
-							t.Errorf("Expected 'binary_authorization' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, tc.hclContent)
+							t.Errorf("Expected 'binary_authorization' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, string(hclContent))
 						}
 					} else {
 						if binaryAuthBlock == nil {
 							if tc.expectEnabledAttributeRemoved || tc.expectedModifications > 0 || tc.binaryAuthorizationShouldHaveEvalMode {
-								t.Fatalf("Expected 'binary_authorization' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, tc.hclContent)
+								t.Fatalf("Expected 'binary_authorization' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, string(hclContent))
 							}
 						} else {
 							hasEnabledAttr := binaryAuthBlock.Body().GetAttribute("enabled") != nil
@@ -1291,10 +1251,10 @@ resource "google_container_cluster" "gke_two" {
 							if tc.expectEnabledAttributeRemoved {
 								if hasEnabledAttr {
 									t.Errorf("Expected 'enabled' attribute to be REMOVED from 'binary_authorization' in %s[\"%s\"], but it was FOUND. HCL:\n%s\nModified HCL:\n%s",
-										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+										blockType, blockName, string(hclContent), string(modifier.File().Bytes()))
 								}
 							} else {
-								originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+								originalParsedFile, _ := hclwrite.ParseConfig(hclContent, "", hcl.InitialPos)
 								originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
 								var originalBinaryAuthBlock *hclwrite.Block
 								if originalResourceBlock != nil {
@@ -1304,7 +1264,7 @@ resource "google_container_cluster" "gke_two" {
 								if originalBinaryAuthBlock != nil && originalBinaryAuthBlock.Body().GetAttribute("enabled") != nil {
 									if !hasEnabledAttr {
 										t.Errorf("Expected 'enabled' attribute to be PRESENT in 'binary_authorization' in %s[\"%s\"], but it was NOT FOUND (removed). HCL:\n%s\nModified HCL:\n%s",
-											blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+											blockType, blockName, string(hclContent), string(modifier.File().Bytes()))
 									}
 								}
 							}
@@ -1312,7 +1272,7 @@ resource "google_container_cluster" "gke_two" {
 							if tc.binaryAuthorizationShouldHaveEvalMode {
 								if !hasEvalModeAttr {
 									t.Errorf("Expected 'evaluation_mode' attribute to be PRESENT in 'binary_authorization' in %s[\"%s\"], but it was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
-										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+										blockType, blockName, string(hclContent), string(modifier.File().Bytes()))
 								}
 							}
 						}
@@ -1329,132 +1289,79 @@ func TestApplyServicesIPV4CIDRRule(t *testing.T) {
 
 	tests := []struct {
 		name                                  string
-		hclContent                            string
+		hclContentFile                        string
 		expectedModifications                 int
 		expectServicesIPV4CIDRBlockRemoved    bool
 		resourceLabelsToVerify                []string
 		ipAllocationPolicyShouldExistForCheck bool
 	}{
 		{
-			name: "Both attributes present in ip_allocation_policy",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block   = "10.2.0.0/20"
-    cluster_secondary_range_name = "services_range"
-  }
-}`,
+			name:                                  "Both attributes present in ip_allocation_policy",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_BothPresent.tf",
 			expectedModifications:                 1,
 			expectServicesIPV4CIDRBlockRemoved:    true,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Only services_ipv4_cidr_block present in ip_allocation_policy",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block   = "10.2.0.0/20"
-  }
-}`,
+			name:                                  "Only services_ipv4_cidr_block present in ip_allocation_policy",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_OnlyServicesCIDR.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Only cluster_secondary_range_name present in ip_allocation_policy",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {
-    cluster_secondary_range_name = "services_range"
-  }
-}`,
+			name:                                  "Only cluster_secondary_range_name present in ip_allocation_policy",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_OnlySecondaryRange.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Neither attribute relevant to Rule 2 present in ip_allocation_policy",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {
-    some_other_attribute = "value"
-  }
-}`,
+			name:                                  "Neither attribute relevant to Rule 2 present in ip_allocation_policy",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_NeitherPresent.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "ip_allocation_policy block is present but empty",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {}
-}`,
+			name:                                  "ip_allocation_policy block is present but empty",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_EmptyPolicy.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "ip_allocation_policy block is missing entirely",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-}`,
+			name:                                  "ip_allocation_policy block is missing entirely",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_NoPolicy.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: false,
 		},
 		{
-			name: "Non-matching resource type with similar nested structure",
-			hclContent: `resource "google_compute_router" "default" {
-  name = "my-router"
-  ip_allocation_policy {
-    services_ipv4_cidr_block   = "10.2.0.0/20"
-    cluster_secondary_range_name = "services_range"
-  }
-}`,
+			name:                                  "Non-matching resource type with similar nested structure",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_NonMatchingResource.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                []string{"google_compute_router", "default"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Multiple google_container_cluster blocks, one matching for Rule 2",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name = "primary-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block   = "10.2.0.0/20"
-    cluster_secondary_range_name = "services_range"
-  }
-}
-resource "google_container_cluster" "secondary" {
-  name = "secondary-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block = "10.3.0.0/20"
-  }
-}`,
+			name:                                  "Multiple google_container_cluster blocks, one matching for Rule 2",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_MultipleResourcesOneMatch.tf",
 			expectedModifications:                 1,
 			expectServicesIPV4CIDRBlockRemoved:    true,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "primary"},
 			ipAllocationPolicyShouldExistForCheck: true,
 		},
 		{
-			name: "Multiple google_container_cluster blocks, ip_policy missing in one",
-			hclContent: `resource "google_container_cluster" "alpha" {
-  name = "alpha-cluster"
-}
-resource "google_container_cluster" "beta" {
-  name = "beta-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block   = "10.4.0.0/20"
-    cluster_secondary_range_name = "services_range_beta"
-  }
-}`,
+			name:                                  "Multiple google_container_cluster blocks, ip_policy missing in one",
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_MultipleResourcesOneMissingPolicy.tf",
 			expectedModifications:                 1,
 			expectServicesIPV4CIDRBlockRemoved:    true,
 			resourceLabelsToVerify:                []string{"google_container_cluster", "beta"},
@@ -1462,7 +1369,7 @@ resource "google_container_cluster" "beta" {
 		},
 		{
 			name:                                  "Empty HCL content",
-			hclContent:                            ``,
+			hclContentFile:                        "testdata/TestApplyServicesIPV4CIDRRule_EmptyFile.tf",
 			expectedModifications:                 0,
 			expectServicesIPV4CIDRBlockRemoved:    false,
 			resourceLabelsToVerify:                nil,
@@ -1472,13 +1379,18 @@ resource "google_container_cluster" "beta" {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
 			tempDir := t.TempDir()
 			tmpFile, err := os.CreateTemp(tempDir, "test_rule2_*.hcl")
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
 
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+			if _, err := tmpFile.Write(hclContent); err != nil {
 				tmpFile.Close()
 				t.Fatalf("Failed to write to temp file: %v", err)
 			}
@@ -1488,7 +1400,7 @@ resource "google_container_cluster" "beta" {
 
 			modifier, err := NewFromFile(tmpFile.Name(), logger)
 			if err != nil {
-				if tc.hclContent == "" && tc.expectedModifications == 0 {
+				if string(hclContent) == "" && tc.expectedModifications == 0 {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
@@ -1500,7 +1412,7 @@ resource "google_container_cluster" "beta" {
 						return
 					}
 				} else {
-					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
 				}
 			}
 
@@ -1510,12 +1422,12 @@ resource "google_container_cluster" "beta" {
 				for _, e := range errs {
 					errorMessages += e.Error() + "\n"
 				}
-				t.Fatalf("ApplyRules(ServicesIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
+				t.Fatalf("ApplyRules(ServicesIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyRules(ServicesIPV4CIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+					modifications, tc.expectedModifications, hclContent, string(modifier.File().Bytes()))
 			}
 
 			modifiedContentBytes := modifier.File().Bytes()
@@ -1551,22 +1463,22 @@ resource "google_container_cluster" "beta" {
 
 					if !tc.ipAllocationPolicyShouldExistForCheck {
 						if ipAllocationPolicyBlock != nil {
-							t.Errorf("Expected 'ip_allocation_policy' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, tc.hclContent)
+							t.Errorf("Expected 'ip_allocation_policy' block NOT to exist for %s[\"%s\"], but it was found. HCL:\n%s", blockType, blockName, string(hclContent))
 						}
 					} else {
 						if ipAllocationPolicyBlock == nil {
 							if tc.expectServicesIPV4CIDRBlockRemoved || tc.expectedModifications > 0 {
-								t.Fatalf("Expected 'ip_allocation_policy' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, tc.hclContent)
+								t.Fatalf("Expected 'ip_allocation_policy' block for %s[\"%s\"], but it was not found. HCL:\n%s", blockType, blockName, string(hclContent))
 							}
 						} else {
 							hasServicesCIDRBlock := ipAllocationPolicyBlock.Body().GetAttribute("services_ipv4_cidr_block") != nil
 							if tc.expectServicesIPV4CIDRBlockRemoved {
 								if hasServicesCIDRBlock {
 									t.Errorf("Expected 'services_ipv4_cidr_block' to be REMOVED from ip_allocation_policy in %s[\"%s\"], but it was FOUND. HCL:\n%s\nModified HCL:\n%s",
-										blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+										blockType, blockName, string(hclContent), string(modifier.File().Bytes()))
 								}
 							} else {
-								originalParsedFile, _ := hclwrite.ParseConfig([]byte(tc.hclContent), "", hcl.InitialPos)
+								originalParsedFile, _ := hclwrite.ParseConfig(hclContent, "", hcl.InitialPos)
 								originalResourceBlock, _ := findBlockInParsedFile(originalParsedFile, blockType, blockName)
 								var originalIpAllocBlock *hclwrite.Block
 								if originalResourceBlock != nil {
@@ -1576,7 +1488,7 @@ resource "google_container_cluster" "beta" {
 								if originalIpAllocBlock != nil && originalIpAllocBlock.Body().GetAttribute("services_ipv4_cidr_block") != nil {
 									if !hasServicesCIDRBlock {
 										t.Errorf("Expected 'services_ipv4_cidr_block' to be PRESENT in ip_allocation_policy in %s[\"%s\"], but it was NOT FOUND. HCL:\n%s\nModified HCL:\n%s",
-											blockType, blockName, tc.hclContent, string(modifier.File().Bytes()))
+											blockType, blockName, string(hclContent), string(modifier.File().Bytes()))
 									}
 								}
 							}
@@ -1594,133 +1506,77 @@ func TestApplyClusterIPV4CIDRRule(t *testing.T) {
 
 	tests := []struct {
 		name                         string
-		hclContent                   string
+		hclContentFile               string
 		expectedModifications        int
 		expectClusterIPV4CIDRRemoved bool
 		resourceLabelsToVerify       []string
 	}{
 		{
-			name: "Both attributes present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block = "10.1.0.0/14"
-  }
-}`,
+			name:                         "Both attributes present",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_BothPresent.tf",
 			expectedModifications:        1,
 			expectClusterIPV4CIDRRemoved: true,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Only cluster_ipv4_cidr present (no ip_allocation_policy block)",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-}`,
+			name:                         "Only cluster_ipv4_cidr present (no ip_allocation_policy block)",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_OnlyClusterIPV4CIDRPresent_NoIpAllocationPolicy.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Only cluster_ipv4_cidr present (ip_allocation_policy block exists but no cluster_ipv4_cidr_block)",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-  ip_allocation_policy {
-    services_ipv4_cidr_block = "10.2.0.0/20"
-  }
-}`,
+			name:                         "Only cluster_ipv4_cidr present (ip_allocation_policy block exists but no cluster_ipv4_cidr_block)",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_OnlyClusterIPV4CIDRPresent_IpAllocationPolicyExists.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Only ip_allocation_policy.cluster_ipv4_cidr_block present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block = "10.1.0.0/14"
-  }
-}`,
+			name:                         "Only ip_allocation_policy.cluster_ipv4_cidr_block present",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_OnlyIpAllocationPolicyPresent.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Neither attribute relevant to Rule 1 present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  ip_allocation_policy {
-    services_ipv4_cidr_block = "10.2.0.0/20"
-  }
-}`,
+			name:                         "Neither attribute relevant to Rule 1 present",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_NeitherAttributePresent.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "ip_allocation_policy block is missing entirely, cluster_ipv4_cidr present",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-}`,
+			name:                         "ip_allocation_policy block is missing entirely, cluster_ipv4_cidr present",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_IpAllocationPolicyMissing.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Non-matching resource type (google_compute_instance)",
-			hclContent: `resource "google_compute_instance" "default" {
-  name               = "test-instance"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block = "10.1.0.0/14"
-  }
-}`,
+			name:                         "Non-matching resource type (google_compute_instance)",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_NonMatchingResourceType.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_compute_instance", "default"},
 		},
 		{
-			name: "Multiple google_container_cluster blocks, one matching",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block = "10.1.0.0/14"
-  }
-}
-resource "google_container_cluster" "secondary" {
-  name               = "secondary-cluster"
-  cluster_ipv4_cidr  = "10.2.0.0/14"
-  ip_allocation_policy {
-    services_ipv4_cidr_block = "10.3.0.0/20"
-  }
-}`,
+			name:                         "Multiple google_container_cluster blocks, one matching",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_MultipleGKEResources_OneMatching.tf",
 			expectedModifications:        1,
 			expectClusterIPV4CIDRRemoved: true,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
-			name: "Multiple google_container_cluster blocks, none matching",
-			hclContent: `resource "google_container_cluster" "primary" {
-  name               = "primary-cluster"
-  cluster_ipv4_cidr  = "10.0.0.0/14"
-}
-resource "google_container_cluster" "secondary" {
-  name               = "secondary-cluster"
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block = "10.1.0.0/14"
-  }
-}`,
+			name:                         "Multiple google_container_cluster blocks, none matching",
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_MultipleGKEResources_NoneMatching.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       []string{"google_container_cluster", "primary"},
 		},
 		{
 			name:                         "Empty HCL content",
-			hclContent:                   ``,
+			hclContentFile:               "testdata/TestApplyClusterIPV4CIDRRule_Empty.tf",
 			expectedModifications:        0,
 			expectClusterIPV4CIDRRemoved: false,
 			resourceLabelsToVerify:       nil,
@@ -1729,13 +1585,18 @@ resource "google_container_cluster" "secondary" {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
 			tempDir := t.TempDir()
 			tmpFile, err := os.CreateTemp(tempDir, "test_*.hcl")
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
 
-			if _, err := tmpFile.Write([]byte(tc.hclContent)); err != nil {
+			if _, err := tmpFile.Write(hclContent); err != nil {
 				tmpFile.Close()
 				t.Fatalf("Failed to write to temp file: %v", err)
 			}
@@ -1745,7 +1606,7 @@ resource "google_container_cluster" "secondary" {
 
 			modifier, err := NewFromFile(tmpFile.Name(), logger)
 			if err != nil {
-				if tc.hclContent == "" && tc.expectedModifications == 0 {
+				if string(hclContent) == "" && tc.expectedModifications == 0 {
 					if modifier == nil {
 						modifications, ruleErr := 0, error(nil)
 						if modifications != tc.expectedModifications {
@@ -1757,7 +1618,7 @@ resource "google_container_cluster" "secondary" {
 						return
 					}
 				} else {
-					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, tc.hclContent)
+					t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
 				}
 			}
 
@@ -1767,12 +1628,12 @@ resource "google_container_cluster" "secondary" {
 				for _, e := range errs {
 					errorMessages += e.Error() + "\n"
 				}
-				t.Fatalf("ApplyRules(ClusterIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, tc.hclContent, errorMessages)
+				t.Fatalf("ApplyRules(ClusterIPV4CIDRRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
 			}
 
 			if modifications != tc.expectedModifications {
 				t.Errorf("ApplyRules(ClusterIPV4CIDRRuleDefinition) modifications = %v, want %v. HCL content:\n%s\nModified HCL:\n%s",
-					modifications, tc.expectedModifications, tc.hclContent, string(modifier.File().Bytes()))
+					modifications, tc.expectedModifications, hclContent, string(modifier.File().Bytes()))
 			}
 
 			modifiedContentBytes := modifier.File().Bytes()
@@ -2045,6 +1906,263 @@ func TestAutopilotRules_NoGKEResource(t *testing.T) {
 
 	assert.Equal(t, expectedModifications, modifications, "Expected 0 modifications for HCL with no GKE resource")
 	assert.Equal(t, string(originalContent), string(modifier.File().Bytes()), "HCL content should remain unchanged")
+}
+
+func TestApplyLoggingServiceRule(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment()
+
+	tests := []struct {
+		name                        string
+		hclContentFile              string
+		expectedModifications       int
+		expectLoggingServiceRemoved bool
+		resourceLabelsToVerify      []string
+	}{
+		{
+			name:                        "Logging service present without telemetry",
+			hclContentFile:              "testdata/TestApplyLoggingServiceRule_LoggingServicePresent.tf",
+			expectedModifications:       0,
+			expectLoggingServiceRemoved: false,
+			resourceLabelsToVerify:      []string{"google_container_cluster", "primary"},
+		},
+		{
+			name:                        "Logging service and telemetry present",
+			hclContentFile:              "testdata/TestApplyLoggingServiceRule_LoggingServiceAndTelemetryPresent.tf",
+			expectedModifications:       1,
+			expectLoggingServiceRemoved: true,
+			resourceLabelsToVerify:      []string{"google_container_cluster", "primary"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write(hclContent); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]types.Rule{rules.RuleRemoveLoggingService})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(LoggingServiceRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
+			}
+
+			assert.Equal(t, tc.expectedModifications, modifications)
+
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
+			if len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				blockName := tc.resourceLabelsToVerify[1]
+				var targetBlock *hclwrite.Block
+
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == blockType && b.Labels()[1] == blockName {
+						targetBlock = b
+						break
+					}
+				}
+
+				if targetBlock != nil {
+					hasLoggingService := targetBlock.Body().GetAttribute("logging_service") != nil
+					if tc.expectLoggingServiceRemoved {
+						assert.False(t, hasLoggingService, "Expected 'logging_service' to be removed")
+					} else {
+						assert.True(t, hasLoggingService, "Expected 'logging_service' to be present")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestApplyMonitoringServiceRule(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment()
+
+	tests := []struct {
+		name                           string
+		hclContentFile                 string
+		expectedModifications          int
+		expectMonitoringServiceRemoved bool
+		resourceLabelsToVerify         []string
+	}{
+		{
+			name:                           "Monitoring service present without monitoring_config",
+			hclContentFile:                 "testdata/TestApplyMonitoringServiceRule_MonitoringServicePresent.tf",
+			expectedModifications:          0,
+			expectMonitoringServiceRemoved: false,
+			resourceLabelsToVerify:         []string{"google_container_cluster", "primary"},
+		},
+		{
+			name:                           "Monitoring service and monitoring_config present",
+			hclContentFile:                 "testdata/TestApplyMonitoringServiceRule_MonitoringServiceAndConfigPresent.tf",
+			expectedModifications:          1,
+			expectMonitoringServiceRemoved: true,
+			resourceLabelsToVerify:         []string{"google_container_cluster", "primary"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write(hclContent); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]types.Rule{rules.RuleRemoveMonitoringService})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(MonitoringServiceRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
+			}
+
+			assert.Equal(t, tc.expectedModifications, modifications)
+
+			modifiedContentBytes := modifier.File().Bytes()
+			verifiedFile, diags := hclwrite.ParseConfig(modifiedContentBytes, tmpFile.Name()+"_verified", hcl.InitialPos)
+			if diags.HasErrors() {
+				t.Fatalf("Failed to parse modified HCL content for verification: %v\nModified HCL:\n%s", diags, string(modifiedContentBytes))
+			}
+
+			if len(tc.resourceLabelsToVerify) == 2 {
+				blockType := tc.resourceLabelsToVerify[0]
+				blockName := tc.resourceLabelsToVerify[1]
+				var targetBlock *hclwrite.Block
+
+				for _, b := range verifiedFile.Body().Blocks() {
+					if b.Type() == "resource" && len(b.Labels()) == 2 && b.Labels()[0] == blockType && b.Labels()[1] == blockName {
+						targetBlock = b
+						break
+					}
+				}
+
+				if targetBlock != nil {
+					hasMonitoringService := targetBlock.Body().GetAttribute("monitoring_service") != nil
+					if tc.expectMonitoringServiceRemoved {
+						assert.False(t, hasMonitoringService, "Expected 'monitoring_service' to be removed")
+					} else {
+						assert.True(t, hasMonitoringService, "Expected 'monitoring_service' to be present")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestApplyNodeVersionRule(t *testing.T) {
+	t.Helper()
+	logger, _ := zap.NewDevelopment()
+
+	tests := []struct {
+		name                     string
+		hclContentFile           string
+		expectedModifications    int
+		expectNodeVersionRemoved bool
+		resourceLabelsToVerify   []string
+	}{
+		{
+			name:                     "Node version present without min_master_version",
+			hclContentFile:           "testdata/TestApplyNodeVersionRule_NodeVersionPresent.tf",
+			expectedModifications:    1,
+			expectNodeVersionRemoved: false,
+			resourceLabelsToVerify:   []string{"google_container_cluster", "primary"},
+		},
+		{
+			name:                     "Node version and min_master_version present",
+			hclContentFile:           "testdata/TestApplyNodeVersionRule_NodeVersionAndMinMasterVersionPresent.tf",
+			expectedModifications:    0,
+			expectNodeVersionRemoved: true,
+			resourceLabelsToVerify:   []string{"google_container_cluster", "primary"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hclContent, err := os.ReadFile(tc.hclContentFile)
+			if err != nil {
+				t.Fatalf("Failed to read test file %s: %v", tc.hclContentFile, err)
+			}
+
+			tempDir := t.TempDir()
+			tmpFile, err := os.CreateTemp(tempDir, "test_*.hcl")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+
+			if _, err := tmpFile.Write(hclContent); err != nil {
+				tmpFile.Close()
+				t.Fatalf("Failed to write to temp file: %v", err)
+			}
+			if err := tmpFile.Close(); err != nil {
+				t.Fatalf("Failed to close temp file: %v", err)
+			}
+
+			modifier, err := NewFromFile(tmpFile.Name(), logger)
+			if err != nil {
+				t.Fatalf("NewFromFile() error = %v for HCL: \n%s", err, hclContent)
+			}
+
+			modifications, errs := modifier.ApplyRules([]types.Rule{rules.SetMinVersionRule})
+			if len(errs) > 0 {
+				var errorMessages string
+				for _, e := range errs {
+					errorMessages += e.Error() + "\n"
+				}
+				t.Fatalf("ApplyRules(NodeVersionRuleDefinition) returned errors = %v for HCL: \n%s. Errors:\n%s", errs, hclContent, errorMessages)
+			}
+
+			assert.Equal(t, tc.expectedModifications, modifications)
+		})
+	}
 }
 
 func TestAutopilotNotPresent_ConflictingFieldsPresent(t *testing.T) {
