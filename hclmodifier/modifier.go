@@ -181,13 +181,8 @@ func (m *Modifier) GetNestedBlock(currentBlockBody *hclwrite.Body, path []string
 		foundBlock = nil // Reset for current level
 		for _, block := range currentLevelBody.Blocks() {
 			if block.Type() == blockName {
-				if i == len(path)-1 {
-					foundBlock = block
-					break
-				}
 				currentLevelBody = block.Body()
 				foundBlock = block
-				break
 			}
 		}
 		if foundBlock == nil {
